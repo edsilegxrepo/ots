@@ -34,9 +34,9 @@ graph TD
         RedisEngine["Redis KV Store<br/>(pkg/storage/redis)"]
     end
 
-    WebUI -->|POST /api/create (Encrypted)| TLS
-    CLIClient -->|POST /api/create (Encrypted)| TLS
-    SDKClient -->|POST /api/create (Encrypted)| TLS
+    WebUI -->|"POST /api/create (Encrypted)"| TLS
+    CLIClient -->|"POST /api/create (Encrypted)"| TLS
+    SDKClient -->|"POST /api/create (Encrypted)"| TLS
 
     TLS --> Mux
     Mux --> RateLimiter
@@ -81,23 +81,23 @@ sequenceDiagram
         Sender->>SPA: Input secret text & file attachments
         SPA->>SPA: Generate CSPRNG 20-char random key & PBKDF2 salt
         SPA->>SPA: Encrypt payload locally via AES-256-CBC
-        SPA->>RL: POST /api/create { "secret": "<base64_blob>" }
+        SPA->>RL: POST /api/create (Encrypted Base64 Payload)
         RL-->>API: Rate limit check OK (IP under limit)
         API->>Store: Create(encryptedBlob, duration)
         Store-->>API: Persist payload & return secret_id
-        API-->>SPA: 201 Created { "secret_id": "<id>", "expires_at": "..." }
-        SPA-->>Sender: Return Secret Link: http://ots.local/#<id>|<key>
+        API-->>SPA: 201 Created (secret_id, expires_at)
+        SPA-->>Sender: Return Secret Link: http://ots.local/#secret_id|key
     end
 
     rect rgb(235, 235, 255)
         note over Receiver, Store: Dual-Channel & Retrieval Flow
-        Sender->>Receiver: Channel A: Send URL http://ots.local/#<id>
-        Sender->>Receiver: Channel B: Send Key <key>
+        Sender->>Receiver: Channel A: Send URL http://ots.local/#secret_id
+        Sender->>Receiver: Channel B: Send Key (decryption_key)
         Receiver->>SPA: Open link & input key
-        SPA->>API: GET /api/get/<id> (Omit Key from HTTP request)
-        API->>Store: ReadAndDestroy(<id>)
+        SPA->>API: GET /api/get/secret_id (Omit Key from HTTP request)
+        API->>Store: ReadAndDestroy(secret_id)
         Store-->>API: Return encrypted blob & atomically delete entry
-        API-->>SPA: 200 OK { "secret": "<base64_blob>" }
+        API-->>SPA: 200 OK (Encrypted Base64 Payload)
         SPA->>SPA: Decrypt blob locally using Key
         SPA-->>Receiver: Display plaintext secret & attachments
     end
