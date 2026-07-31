@@ -9,6 +9,8 @@ reference:
     alert-something-went-wrong: 'An inconsistency was detected. It is usually due to an authentication, encryption or processing failure. Please try again.'
     btn-create-secret: 'Create the secret'
     btn-create-secret-processing: 'Secret is being created'
+    btn-download-bundle: 'Download as Bundle'
+    btn-downloading-bundle: 'Generating Bundle...'
     btn-new-secret: 'New Secret'
     btn-reveal-secret: 'Show the secret'
     btn-reveal-secret-processing: 'Secret is being decrypted'
