@@ -34,3 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Added explicit justification comments and `<!-- nosemgrep -->` directives for trusted `i18n.yaml` and `customize.yaml` HTML rendering in Vue components.
   - Scoped `IFS=,` array joins to local subshells in shell automation scripts (`ci/docker-gen-tagnames.sh`).
   - Audited dependencies: 0 secrets (TruffleHog), 0 security issues (Gosec), 0 NPM vulnerabilities (`package-lock.json` synchronized), 0 module vulnerabilities (GoVulnCheck).
+
+---
+
+For historical release records prior to v1.30.0, see [History.md](History.md).
