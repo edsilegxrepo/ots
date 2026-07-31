@@ -4,7 +4,7 @@ services:
     restart: always
     environment:
       # Optional, see "Customization" in README
-      #CUSTOMIZE: '/etc/ots/customize.yaml'
+      #CUSTOMIZE: '/etc/ots/config.yaml'
       # See README for details
       REDIS_URL: redis://valkey:6379/0
       # 168h = 1w

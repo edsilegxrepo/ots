@@ -38,7 +38,7 @@ local_resource(
   ],
   serve_cmd='go run . --listen=:15641',
   serve_env={
-    'CUSTOMIZE': 'customize.yaml',
+    'CUSTOMIZE': 'testfiles/config.yml',
   },
   readiness_probe=probe(
     http_get=http_get_action(15641, path='/api/healthz'),

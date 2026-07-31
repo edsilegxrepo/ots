@@ -24,4 +24,4 @@ OTS_STORAGE="redis"
 OTS_LOG_LEVEL="info"
 
 # YAML file containing the definitions of customizations
-OTS_CONFIG="/etc/ots/ots-config.yaml"
+OTS_CONFIG="/etc/ots/config.yaml"

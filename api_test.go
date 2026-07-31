@@ -497,7 +497,7 @@ func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
 	const rawAttachmentSize = 53 * 1024 * 1024
 	rawBytes := bytes.Repeat([]byte("A"), rawAttachmentSize)
 
-	att := client.FileAttachment{
+	att := client.SecretAttachment{
 		Name:    "scipy-1.11.3-3.rawhide.src.rpm",
 		Type:    "application/x-rpm",
 		Content: rawBytes,
@@ -505,7 +505,7 @@ func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
 
 	sec := client.Secret{
 		Secret:      "RPM Package Description",
-		Attachments: []client.FileAttachment{att},
+		Attachments: []client.SecretAttachment{att},
 	}
 
 	// 1. Create Secret via client library with 53.5 MiB attachment

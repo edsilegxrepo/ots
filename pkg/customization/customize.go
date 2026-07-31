@@ -2,7 +2,7 @@
 // file to configure the OTS web- and command-line interface.
 //
 // Objectives:
-// - Manages loading, validation, and JSON serialization of custom operator configuration files (customize.yaml).
+// - Manages loading, validation, and JSON serialization of custom operator configuration files (config.yml).
 // - Sets sensible production defaults for secret sizes, rate limits, search engine privacy (robots.txt), and UI settings.
 // - Resolves group alias tokens (@images, @office, @archives) into normalized extension lists for pre-flight attachment checks.
 //

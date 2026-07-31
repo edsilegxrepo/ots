@@ -1,0 +1,115 @@
+# -----------------------------------------------------------------------------
+#  testdata/config.yml
+#  Complete Reference Configuration File for OTS (One-Time Secrets)
+#  Documents all available customization options and defaults.
+# -----------------------------------------------------------------------------
+
+# Custom application title displayed in top navigation bar and HTML header title tag.
+# Default: "OTS - One Time Secrets"
+appTitle: "OTS - One Time Secrets"
+
+# Custom application logo image URL/path for light mode.
+# Recommended height: 30px (e.g., "/custom-logo.png" served via overlayFSPath).
+# Default: "" (uses FontAwesome user-secret icon)
+appIcon: ""
+
+# Custom application logo image URL/path for dark mode.
+# Default: "" (falls back to appIcon or default icon)
+appIconDark: ""
+
+# HTML-formatted custom banner message displayed inside the secret creation box.
+# Supports standard HTML tags (e.g., <i>, <strong>, <a>, <p>).
+# Default: ""
+customBannerHTML: '<i class="fas fa-shield-halved me-2"></i><strong>Security Notice:</strong> All secrets are encrypted locally in your browser using AES-256-GCM before transmission. The server never receives plain data or decryption keys.'
+
+# Hide application title text from navigation bar (useful if appIcon includes title text).
+# Default: false
+disableAppTitle: false
+
+# Hide "Powered by OTS" link in page footer.
+# Default: false
+disablePoweredBy: true
+
+# Hide QR Code button and disable QR code generation for secret URLs.
+# Default: false
+disableQRSupport: false
+
+# Add "noindex, nofollow" headers and robots.txt rules to prevent search engine indexing.
+# Default: true
+disableSearchIndex: true
+
+# Hide light / auto / dark theme switcher toggle in top navigation bar.
+# Default: false
+disableThemeSwitcher: false
+
+# Prevent users from selecting custom expiration durations via frontend dropdown or API parameter.
+# Default: false
+disableExpiryOverride: false
+
+# Custom list of secret expiration durations (in seconds) offered in the UI dropdown.
+# Order in array controls order in dropdown menu.
+# Default: [300, 3600, 86400, 604800] (5m, 1h, 1d, 7d)
+expiryChoices:
+  - 300       # 5 minutes
+  - 3600      # 1 hour
+  - 86400     # 1 day (default)
+  - 604800    # 7 days
+
+# Filter allowed attachment file types via comma-separated extensions or MIME types.
+# Supports group aliases (@images, @office, @archives, @code, @audio, @video, @security-files).
+# Example: "image/*, application/pdf, .zip, @images, @office, @security-files"
+# Default: "" (all file types allowed)
+acceptedFileTypes: "image/*, text/plain, application/pdf, application/zip, @images, @office, @security-files"
+
+# Disable file attachment uploading functionality entirely in frontend.
+# Default: false
+disableFileAttachment: false
+
+# Maximum cumulative storage capacity (in bytes) across all active secrets on server instance.
+# Set to 0 for unlimited storage.
+# Default: 0
+maxAttachmentSizeTotal: 0
+
+# Maximum secret request body size (in bytes) accepted by HTTP handler.
+# Defaults to 121168782 bytes (~115.55 MiB) to support 64 MiB attachments after double base64 expansion.
+# Default: 121168782
+maxSecretSize: 121168782
+
+# Maximum number of secret creation requests allowed per minute per IP address.
+# Default: 30
+rateLimitCreate: 30
+
+# List of IP addresses or CIDR blocks permitted to scrape Prometheus metrics from /metrics endpoint.
+# Default: [] (all requests denied unless specified)
+metricsAllowedSubnets:
+  - "127.0.0.1/32"
+  - "::1/128"
+  - "10.0.0.0/8"
+
+# Path to custom JSON file mapping alias group names (e.g. "@team-docs") to arrays of file extensions.
+# Default: "" (uses internal embedded group mappings)
+fileGroupsPath: ""
+
+# Path to local directory containing static assets that override baked-in frontend files.
+# Default: ""
+overlayFSPath: ""
+
+# List of trusted reverse proxy IP addresses or CIDR blocks used for X-Forwarded-For client IP resolution.
+# Default: []
+trustedProxies:
+  - "127.0.0.1"
+  - "10.0.0.0/8"
+
+# Enable formal language translations for supported locales (e.g. German "de-formal").
+# Default: false
+useFormalLanguage: false
+
+# Custom links appended to page footer (e.g., Privacy Policy, Imprint, Terms of Service).
+# Default: []
+footerLinks:
+  - name: "Privacy Policy"
+    url: "https://example.com/privacy"
+  - name: "Imprint"
+    url: "https://example.com/imprint"
+  - name: "Terms of Service"
+    url: "https://example.com/terms"
