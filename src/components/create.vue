@@ -115,6 +115,7 @@
             >{{ $t('label-expiry') }}</label>
             <div class="col-md-6">
               <select
+                id="createSecretExpiry"
                 v-model="selectedExpiry"
                 class="form-select"
               >
@@ -243,7 +244,7 @@ export default defineComponent({
 		},
 
 		invalidFilesSelected(): boolean {
-			if (this.customize.acceptedFileTypes === "") {
+			if (!this.customize || !this.customize.acceptedFileTypes || this.customize.acceptedFileTypes === "") {
 				// No limitation configured, no need to check
 				return false;
 			}
@@ -271,9 +272,10 @@ export default defineComponent({
 		},
 
 		maxFileSize(): number {
-			return this.customize.maxAttachmentSizeTotal === 0
+			const size = Number(this.customize?.maxAttachmentSizeTotal);
+			return !size || size === 0
 				? internalMaxFileSize
-				: Math.min(internalMaxFileSize, this.customize.maxAttachmentSizeTotal);
+				: Math.min(internalMaxFileSize, size);
 		},
 
 		maxFileSizeExceeded(): boolean {
@@ -318,7 +320,7 @@ export default defineComponent({
 		bytesToHuman,
 
 		checkWriteAccess(): Promise<void> {
-			return fetch("api/isWritable", {
+			return fetch("/api/isWritable", {
 				credentials: "same-origin",
 				method: "GET",
 				redirect: "error",
@@ -378,9 +380,9 @@ export default defineComponent({
 				.serialize()
 				.then((secret) => appCrypto.enc(secret, this.securePassword))
 				.then((secret) => {
-					let reqURL = "api/create";
+					let reqURL = "/api/create";
 					if (this.selectedExpiry !== null) {
-						reqURL = `api/create?expire=${this.selectedExpiry}`;
+						reqURL = `/api/create?expire=${this.selectedExpiry}`;
 					}
 
 					return fetch(reqURL, {

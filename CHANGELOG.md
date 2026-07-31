@@ -5,6 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [v1.31.0] - 2026-07-31
+
+### Added
+- **Enterprise Delivery Message Generator & Modal (`src/components/message-modal.vue` & `src/components/display-url.vue`):**
+  - Added high-contrast `[Generate Message]` button (`btn btn-success btn-sm text-white shadow-sm fw-semibold`) on the right side of the *"Secret created"* card banner header.
+  - Added 4 enterprise delivery template tabs (**Full Link**, **Dual Link Part 1**, **Dual Key Part 2**, **Combined Chat**).
+  - Added an interactive **Format Switcher** supporting **Plain Text (ASCII Box)**, **HTML (Rich Email Box)**, **Markdown (Slack/Teams)**, and **JSON (API/Webhooks)** with 1-click copy buttons.
+  - Unit test `TestEnterpriseMessageTemplatesRendering` added in `api_test.go` verifying zero emojis and ASCII box-drawing border integrity.
+- **Structured File Logging & NDJSON Support (`main.go`):**
+  - Added `--log-file-path` flag to redirect log output to a dedicated log file path.
+  - Added `--log-format` flag supporting `text`, `json`, and `ndjson` (Newline Delimited JSON) structured logging formats.
+  - Added unit tests `TestLogFormatNDJSON` and `TestLogFilePathWriting` in `main_test.go`.
+- **Security Extension Groups & Merging (`pkg/customization/file_groups.go`):**
+  - Added `@security-files` and `@security` extension aliases (`.pem, .crt, .key, .cer, .pfx, .asc, .jks, .p12, .der, .csr, .crl`).
+  - Updated `ExpandAcceptedFileTypes` to append/merge custom JSON group extension definitions with built-in default groups.
+  - Added unit test `TestExpandAcceptedFileTypes` in `file_groups_test.go`.
+
+---
+
 ## [v1.30.0] - 2026-07-30
 
 ### Added

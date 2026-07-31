@@ -39,3 +39,28 @@ disableSearchIndex: false
 	assert.Contains(t, c2.ResolvedAcceptedExtensions, ".png")
 	assert.Contains(t, c2.ResolvedAcceptedExtensions, ".pdf")
 }
+
+func TestCustomizeDefaultMaxSecretSizeCalculation(t *testing.T) {
+	// Verify defaultMaxSecretSize numeric bounds (65 MiB * 16 / 9 = 115.55 MiB = 121,168,782 bytes)
+	expectedSize := int64(65 * 1024 * 1024 * 16 / 9)
+	assert.Equal(t, int64(121168782), expectedSize)
+	assert.Greater(t, defaultMaxSecretSize, int64(100*1024*1024), "defaultMaxSecretSize must be greater than 100 MiB to support 64 MiB attachments")
+
+	c, err := Load("")
+	require.NoError(t, err)
+	assert.Equal(t, expectedSize, c.MaxSecretSize)
+}
+
+func TestLoadTestDataReferenceCustomize(t *testing.T) {
+	refPath := filepath.Join("..", "..", "testdata", "customize.yaml")
+	if _, err := os.Stat(refPath); os.IsNotExist(err) {
+		t.Skip("testdata/customize.yaml not found at path")
+	}
+
+	cust, err := Load(refPath)
+	require.NoError(t, err, "testdata/customize.yaml must parse cleanly without errors")
+	assert.Equal(t, "OTS - One Time Secrets", cust.AppTitle)
+	assert.True(t, cust.DisablePoweredBy)
+	assert.Len(t, cust.FooterLinks, 3)
+	assert.Contains(t, cust.CustomBannerHTML, "Security Notice")
+}

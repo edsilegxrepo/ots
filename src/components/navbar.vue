@@ -117,9 +117,9 @@ export default defineComponent({
 	computed: {
 		appIcon(): string {
 			// Use specified icon or fall back to null
-			const appIcon = this.$parent.customize.appIcon || null;
+			const appIcon = (this.$parent as any)?.customize?.appIcon || null;
 			// Use specified icon or fall back to light-mode appIcon (which might be null)
-			const darkIcon = this.$parent.customize.appIconDark || appIcon;
+			const darkIcon = (this.$parent as any)?.customize?.appIconDark || appIcon;
 
 			return (this.theme === "auto" ? window.getTheme() : this.theme) === "dark"
 				? darkIcon
@@ -127,7 +127,7 @@ export default defineComponent({
 		},
 
 		customize(): any {
-			return this.$parent.customize || {};
+			return (this.$parent as any)?.customize || {};
 		},
 	},
 

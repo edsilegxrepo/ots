@@ -1,0 +1,21 @@
+[Unit]
+Description=OTS self-hosted service
+Documentation=https://github.com/Luzifer/ots
+After=syslog.target network-online.target redis.service
+Wants=network-online.target redis.service
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=websvc
+Group=apps
+
+EnvironmentFile=/etc/sysconfig/ots
+ExecStart=/usr/sbin/ots --listen ${OTS_LISTENER} --log-level ${OTS_LOG_LEVEL} --storage-type ${OTS_STORAGE} --customize ${OTS_CONFIG}
+TimeoutSec=300
+Restart=always
+RestartSec=90
+
+[Install]
+WantedBy=multi-user.target

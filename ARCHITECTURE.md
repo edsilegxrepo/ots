@@ -116,8 +116,9 @@ sequenceDiagram
 
 ### Concurrency Model & Lock Granularity
 - **Lock-Free Atomic Counters:** Active storage byte tracking (`storageBytes`) and Prometheus metrics vectors use Go lock-free `sync/atomic` primitives (`atomic.Int64`), eliminating mutex contention during high-throughput secret uploads and downloads.
-- **Sliding-Window Mutex Scope:** IP rate limiting (`ipRateLimiter`) uses fine-grained `sync.Mutex` locks held strictly during map timestamp array evaluation, ensuring sub-millisecond lock hold times under heavy concurrent load.
-- **Non-Blocking Background Goroutines:** Metrics counter updates (`updateStoredSecretsCount`) and rate limiter ticker cleanups operate asynchronously in detached goroutines to prevent blocking HTTP handler threads.
+- **32-Bucket Sharded Rate Limiting:** IP rate limiting (`ipRateLimiter`) shards request tracking across 32 independent `sync.Mutex` buckets using a zero-allocation inline FNV-1a integer hash (`uint32` shift-multiplier loop), completely eliminating global mutex lock contention under parallel request spikes.
+- **Pre-Parsed Proxy CIDR Evaluation:** Trusted proxy IP validation (`cust.TrustedProxies`) pre-compiles CIDR blocks (`ResolvedTrustedCIDRs`) and IP ranges (`ResolvedTrustedIPs`) during startup, ensuring zero runtime string parsing during HTTP IP extraction.
+- **Throttled Telemetry Updates:** Secret metrics calculation operates strictly on background 1-minute ticker routines, protecting backend storage engines (such as Redis) from unthrottled key scanning overhead under heavy API traffic.
 - **Horizontal Scaling via Redis:** When configured with `--storage-type=redis`, OTS operates completely stateless, allowing horizontal scaling behind load balancers with native Redis key TTL eviction.
 
 ---

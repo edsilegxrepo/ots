@@ -3,10 +3,18 @@
   <div class="card border-success-subtle mb-3">
     <!-- Safe: Trusted internal translation string from i18n.yaml -->
     <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-    <div
-      class="card-header bg-success-subtle"
-      v-html="$t('title-secret-created')"
-    />
+    <div class="card-header bg-success-subtle d-flex justify-content-between align-items-center py-2">
+      <!-- Safe: Trusted internal translation string from i18n.yaml -->
+      <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
+      <span v-html="$t('title-secret-created')" />
+      <app-message-modal-button
+        v-if="!burned"
+        :secret-url="secretUrl"
+        :short-url="shortUrl"
+        :secure-password="securePassword"
+        :burn-time="burnTime"
+      />
+    </div>
     <div
       v-if="!burned"
       class="card-body"
@@ -25,9 +33,12 @@
         >
         <app-clipboard-button
           :content="secretUrl"
-          :title="$t('tooltip-copy-to-clipboard')"
+          :title="$t('tooltip-copy-full-link')"
         />
-        <app-qr-button :qr-content="secretUrl" />
+        <app-qr-button
+          :qr-content="secretUrl"
+          :title="$t('tooltip-qr-code')"
+        />
         <button
           class="btn btn-danger"
           :title="$t('tooltip-burn-secret')"
@@ -46,14 +57,14 @@
               <label class="form-label small mb-1">Short Link (without key):</label>
               <div class="input-group input-group-sm">
                 <input class="form-control" type="text" readonly :value="shortUrl">
-                <app-clipboard-button :content="shortUrl" :title="$t('tooltip-copy-to-clipboard')" />
+                <app-clipboard-button :content="shortUrl" :title="$t('tooltip-copy-short-link')" />
               </div>
             </div>
             <div class="col-md-5">
               <label class="form-label small mb-1">Decryption Key:</label>
               <div class="input-group input-group-sm">
                 <input class="form-control" type="text" readonly :value="securePassword">
-                <app-clipboard-button :content="securePassword" :title="$t('tooltip-copy-to-clipboard')" />
+                <app-clipboard-button :content="securePassword" :title="$t('tooltip-copy-decryption-key')" />
               </div>
             </div>
           </div>
@@ -80,10 +91,11 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import appClipboardButton from "./clipboard-button.vue";
+import appMessageModalButton from "./message-modal.vue";
 import appQrButton from "./qr-button.vue";
 
 export default defineComponent({
-	components: { appClipboardButton, appQrButton },
+	components: { appClipboardButton, appMessageModalButton, appQrButton },
 
 	computed: {
 		secretUrl(): string {
@@ -110,7 +122,7 @@ export default defineComponent({
 
 	methods: {
 		burnSecret(): Promise<void> {
-			return fetch(`api/get/${this.secretId}`).then(() => {
+			return fetch(`/api/get/${this.secretId}`).then(() => {
 				this.burned = true;
 			});
 		},

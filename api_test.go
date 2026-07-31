@@ -404,3 +404,162 @@ func TestLiveServerDualChannelSplitKeyE2E(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
 }
+
+func TestLiveServerConcurrencyAndAntiSpoofingE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// High concurrency parallel load test
+	const workers = 20
+	errChan := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		go func(workerID int) {
+			sec := client.Secret{
+				Secret: fmt.Sprintf("Parallel secret payload from worker %d", workerID),
+			}
+			secretURL, _, err := client.Create(liveServer.URL, sec, 5*time.Minute)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			fetched, err := client.Fetch(secretURL)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if fetched.Secret != sec.Secret {
+				errChan <- fmt.Errorf("secret mismatch for worker %d", workerID)
+				return
+			}
+			errChan <- nil
+		}(i)
+	}
+
+	for i := 0; i < workers; i++ {
+		err := <-errChan
+		assert.NoError(t, err)
+	}
+}
+
+func TestLiveServerSanitizedErrorResponsesE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// Test 1: Fetching non-existent secret ID returns 404 with UUID tracking error ID
+	resp, err := http.Get(liveServer.URL + "/api/get/non-existent-uuid-12345")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	var errResp apiResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+	assert.False(t, errResp.Success)
+	assert.NotEmpty(t, errResp.Error)
+	assert.Len(t, errResp.Error, 36) // UUID v4 string length
+
+	// Test 2: Malformed JSON creation returns 400 Bad Request with UUID tracking error ID
+	resp2, err := http.Post(liveServer.URL+"/api/create", "application/json", strings.NewReader(`{invalid-json`))
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+
+	var errResp2 apiResponse
+	require.NoError(t, json.NewDecoder(resp2.Body).Decode(&errResp2))
+	assert.False(t, errResp2.Success)
+	assert.NotEmpty(t, errResp2.Error)
+	assert.Len(t, errResp2.Error, 36)
+}
+
+func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// Simulate a 53.5 MiB raw binary attachment (expands to ~95.1 MiB after double base64 encoding)
+	// Create ~53.5 MiB binary buffer
+	const rawAttachmentSize = 53 * 1024 * 1024
+	rawBytes := bytes.Repeat([]byte("A"), rawAttachmentSize)
+
+	att := client.FileAttachment{
+		Name:    "scipy-1.11.3-3.rawhide.src.rpm",
+		Type:    "application/x-rpm",
+		Content: rawBytes,
+	}
+
+	sec := client.Secret{
+		Secret:      "RPM Package Description",
+		Attachments: []client.FileAttachment{att},
+	}
+
+	// 1. Create Secret via client library with 53.5 MiB attachment
+	secretURL, decryptionKey, err := client.Create(liveServer.URL, sec, 24*time.Hour)
+	require.NoError(t, err, "creating secret with 53.5 MiB attachment must succeed under production 115.55 MiB capacity limit")
+	assert.NotEmpty(t, secretURL)
+	assert.NotEmpty(t, decryptionKey)
+
+	// 2. Fetch & verify payload integrity
+	fetched, err := client.Fetch(secretURL)
+	require.NoError(t, err, "fetching 53.5 MiB attachment secret must succeed")
+	assert.Equal(t, "RPM Package Description", fetched.Secret)
+	require.Len(t, fetched.Attachments, 1)
+	assert.Equal(t, "scipy-1.11.3-3.rawhide.src.rpm", fetched.Attachments[0].Name)
+	assert.Equal(t, rawAttachmentSize, len(fetched.Attachments[0].Content))
+
+	// 3. Verify one-time burn
+	_, err = client.Fetch(secretURL)
+	assert.Error(t, err, "second read must return 404 Not Found")
+}
+
+func TestEnterpriseMessageTemplatesRendering(t *testing.T) {
+	secretID := "57a87bbd-fc58-4716-aa36-511d027a40aa"
+	key := "zAuhdWvm96ugn3JsgU0m"
+	baseURL := "http://127.0.0.1:3000/"
+	fullURL := baseURL + "#" + secretID + "%7C" + key
+	shortURL := baseURL + "#" + secretID
+	expiry := "8/1/2026, 3:52:40 PM"
+
+	// 1. Full Link Template
+	fullTpl := "===================================================================\n" +
+		"                  CONFIDENTIAL ONE-TIME SECRET\n" +
+		"===================================================================\n\n" +
+		"Hello,\n\nA secure, encrypted one-time secret has been generated for you.\n\n" +
+		"-------------------------------------------------------------------\nSECRET URL:\n" + fullURL + "\n" +
+		"-------------------------------------------------------------------\n\n" +
+		"IMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n" +
+		"   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n" +
+		"3. Expiration: " + expiry + " (if not viewed before).\n\n" +
+		"==================================================================="
+
+	assert.Contains(t, fullTpl, fullURL)
+	assert.Contains(t, fullTpl, "CONFIDENTIAL ONE-TIME SECRET")
+	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, fullTpl, "template must contain zero emojis")
+
+	// 2. Dual Link Part 1 Template
+	dualLinkTpl := "SECRET LINK (Without Decryption Key):\n" + shortURL
+	assert.Contains(t, dualLinkTpl, shortURL)
+	assert.NotContains(t, dualLinkTpl, key)
+	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, dualLinkTpl, "dual link template must contain zero emojis")
+
+	// 3. Dual Key Part 2 Template
+	dualKeyTpl := "DECRYPTION KEY:\n" + key
+	assert.Contains(t, dualKeyTpl, key)
+	assert.NotContains(t, dualKeyTpl, shortURL)
+	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, dualKeyTpl, "dual key template must contain zero emojis")
+}

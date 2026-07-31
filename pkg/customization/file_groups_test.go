@@ -46,6 +46,23 @@ func TestExpandAcceptedFileTypes(t *testing.T) {
 			},
 		},
 		{
+			name:  "Group alias @security-files",
+			input: "@security-files",
+			expected: []string{
+				".pem", ".crt", ".key", ".cer", ".pfx", ".asc", ".jks", ".p12", ".der", ".csr", ".crl",
+			},
+		},
+		{
+			name:  "Extend existing built-in group with custom JSON extensions",
+			input: "@security-files",
+			customGroups: map[string][]string{
+				"@security-files": {".keystore", ".jks"},
+			},
+			expected: []string{
+				".pem", ".crt", ".key", ".cer", ".pfx", ".asc", ".jks", ".p12", ".der", ".csr", ".crl", ".keystore",
+			},
+		},
+		{
 			name:  "Custom group override",
 			input: "@custom, .txt",
 			customGroups: map[string][]string{

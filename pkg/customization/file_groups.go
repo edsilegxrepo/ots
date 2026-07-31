@@ -29,8 +29,10 @@ var DefaultFileGroups = map[string][]string{
 	"@office":    {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
 	"@documents": {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
 	"@packages":  {".deb", ".rpm", ".apk", ".msi", ".pkg", ".appimage", ".dmg", ".flatpakref", ".snap", ".ipa"},
-	"@binaries":  {".exe", ".bin", ".dll", ".so", ".dylib", ".elf", ".dat"},
-	"@code":      {".json", ".xml", ".yaml", ".yml", ".py", ".js", ".ts", ".go", ".sh", ".ps1", ".html", ".css", ".sql"},
+	"@binaries":       {".exe", ".bin", ".dll", ".so", ".dylib", ".elf", ".dat"},
+	"@code":           {".json", ".xml", ".yaml", ".yml", ".py", ".js", ".ts", ".go", ".sh", ".ps1", ".html", ".css", ".sql"},
+	"@security":       {".pem", ".crt", ".key", ".cer", ".pfx", ".asc", ".jks", ".p12", ".der", ".csr", ".crl"},
+	"@security-files": {".pem", ".crt", ".key", ".cer", ".pfx", ".asc", ".jks", ".p12", ".der", ".csr", ".crl"},
 }
 
 // LoadCustomFileGroups loads additional or overridden file groups from a JSON file.
@@ -113,15 +115,25 @@ func ExpandAcceptedFileTypes(input string, customGroups map[string][]string) []s
 
 		if strings.HasPrefix(token, "@") {
 			groupKey := strings.ToLower(token)
-			// Check custom groups first, then default groups
-			exts, ok := customGroups[groupKey]
-			if !ok {
-				exts, ok = DefaultFileGroups[groupKey]
-			}
-			if ok {
-				for _, ext := range exts {
+			foundGroup := false
+
+			// Check default groups first
+			if defaultExts, ok := DefaultFileGroups[groupKey]; ok {
+				foundGroup = true
+				for _, ext := range defaultExts {
 					addExt(ext)
 				}
+			}
+
+			// Merge custom groups (appends additional custom extensions to existing or custom groups)
+			if customExts, ok := customGroups[groupKey]; ok {
+				foundGroup = true
+				for _, ext := range customExts {
+					addExt(ext)
+				}
+			}
+
+			if foundGroup {
 				continue
 			}
 		}

@@ -14,7 +14,7 @@ const (
 	metricSecretsCreated      = "secrets_created"
 	metricSecretsRead         = "secrets_read"
 	metricSecretsCreateErrors = "secrets_create_errors"
-	meticsSecretsReadErrors   = "secrets_read_errors"
+	metricsSecretsReadErrors  = "secrets_read_errors"
 	metricsSecretsStored      = "secrets_stored"
 
 	labelReason = "reason"
@@ -60,7 +60,7 @@ func New() *Collector {
 
 		secretsReadErrors: promauto.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
-			Name:      meticsSecretsReadErrors,
+			Name:      metricsSecretsReadErrors,
 			Help:      "number of read-errors for each reason",
 		}, []string{labelReason}),
 

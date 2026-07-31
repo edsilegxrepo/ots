@@ -193,7 +193,6 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 	}
 
 	a.collector.CountSecretCreated()
-	go updateStoredSecretsCount(a.store, a.collector)
 	a.jsonResponse(res, http.StatusCreated, apiResponse{
 		ExpiresAt: expiresAt,
 		Success:   true,
@@ -226,7 +225,6 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 	a.storageBytes.Add(-int64(len(secret)))
 
 	a.collector.CountSecretRead()
-	go updateStoredSecretsCount(a.store, a.collector)
 	a.jsonResponse(res, http.StatusOK, apiResponse{
 		Success: true,
 		Secret:  secret,

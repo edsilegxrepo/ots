@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/Luzifer/rconfig/v2"

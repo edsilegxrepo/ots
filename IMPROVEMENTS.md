@@ -123,3 +123,52 @@ This document outlines the selected GitHub issues and repository improvements pl
 - [x] **6. Total Attachment Storage Cap (#234)**
 - [x] **7. Dual-Channel Key Separation (#208)**
 - [x] **8. High-Capacity Attachment Support (>64MB Memory Optimization)**
+- [x] **9. Trusted Reverse Proxy IP Extraction & Anti-Spoofing Guardrails**
+- [x] **10. Sharded Mutex Sliding Window Rate Limiting (High Concurrency)**
+- [x] **11. Granular Diagnostic Exit Codes & Cross-Platform Graceful Shutdown**
+- [x] **12. Error Sanitization & Code Quality / Metric Typo Remediations**
+- [x] **13. Non-TLS Listener Security Hardening (Loopback Binding)**
+
+---
+
+## Phase 3: Comprehensive Code Review, Security & Performance Remediations
+
+### 1. Trusted Reverse Proxy IP Extraction & Anti-Spoofing (`ratelimit.go`, `pkg/customization/customize.go`)
+- **Finding:** Previously, `getClientIP` trusted `X-Forwarded-For` and `X-Real-IP` headers unconditionally. An unauthenticated attacker could bypass rate limits by sending arbitrary `X-Forwarded-For` IP headers. Furthermore, evaluating CIDRs per request incurred repeated parsing overhead.
+- **Remediation:** Added `trustedProxies` configuration field (`TrustedProxies []string`). Pre-parses trusted proxy CIDRs (`ResolvedTrustedCIDRs`) and exact IPs (`ResolvedTrustedIPs`) during initialization (`ApplyFixes()`) so request checking executes with zero runtime parsing overhead. Retains backwards compatibility when unconfigured.
+
+### 2. Sharded Mutex Sliding Window Rate Limiter (`ratelimit.go`)
+- **Finding:** `ipRateLimiter` held a single global `sync.Mutex` lock across all request IP lookups and cleanup routines, introducing heavy lock contention under parallel request spikes.
+- **Remediation:** Refactored `ipRateLimiter` into 32 mutex-sharded buckets. Replaced interface/struct hashing with a zero-allocation inline FNV-1a integer hash (`uint32` shift-multiplier loop) on IP bytes. Pre-allocated slice capacities during window filtering to eliminate GC allocation overhead.
+
+### 3. Granular Diagnostic Exit Codes & Graceful Shutdown (`main.go`)
+- **Finding:** `main.go` invoked `logrus.Fatal()`, calling `os.Exit(1)` indiscriminately for configuration, storage, or network failures. Additionally, process termination aborted active HTTP connections immediately without graceful drain.
+- **Remediation:**
+  - Defined explicit diagnostic exit codes:
+    - `ExitSuccess = 0`
+    - `ExitConfigError = 2` (Configuration parsing or template loading failures)
+    - `ExitStorageError = 3` (Backend storage initialization failure)
+    - `ExitNetworkError = 4` (HTTP/HTTPS server listen or bind failure)
+  - Synchronously validated TLS configuration prior to spawning server listeners.
+  - Implemented cross-platform signal handling (`SIGINT`, `SIGTERM`) with `server.Shutdown(ctx)` (10s timeout window).
+
+### 4. High-Frequency Metric Scan Optimization & Error Leak Fix (`api.go`, `main.go`)
+- **Finding:**
+  - Request handlers (`handleCreate`, `handleRead`) spawned unthrottled goroutines calling `updateStoredSecretsCount`, causing Redis full key scan spikes under heavy traffic.
+  - Template execution failures written to `http.Error` leaked template internal errors to HTTP clients.
+- **Remediation:**
+  - Removed unthrottled goroutine spawns inside HTTP request handlers, delegating counts strictly to the background ticker in `main.go`.
+  - Sanitized template error responses to generic `Internal Server Error` while logging internal trace details via `logrus`.
+
+### 5. Non-TLS Listener Security Hardening (`main.go`)
+- **Finding:** Running unencrypted HTTP on open/wildcard interfaces (`0.0.0.0` or `:3000`) without TLS exposes plain HTTP traffic over public networks, while blindly overriding explicit operator `--listen 0.0.0.0` flags would break Docker/Kubernetes container ingress networking.
+- **Remediation:** Hardened `initApp()` with smart conflict resolution:
+  - If `--listen` is left at default (`:3000`) and TLS is disabled, OTS automatically hardens the address binding to **loopback (`127.0.0.1:3000`)**.
+  - If an operator explicitly specifies a custom `--listen` override (e.g. `--listen 0.0.0.0:3000` for container ingress), OTS honors the explicit setting to prevent breaking container networking while issuing a prominent security warning log (`TLS is disabled while listening on a wildcard interface`).
+
+### 6. Metric Typo & Package Minimization (`pkg/metrics/metrics.go`, `api.go`)
+- **Finding:** Misspelled metric name constant `meticsSecretsReadErrors` in `pkg/metrics/metrics.go`.
+- **Remediation:** Corrected metric name to `metricsSecretsReadErrors`. Consolidated API constructor functions.
+
+
+

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -30,7 +31,7 @@ import (
 // 65MiB and increase it by double base64 encoding:
 //
 // 65 MiB * 16/9 (twice 4/3 base64 size increase)
-const defaultMaxSecretSize = 65 * 1024 * 1024 * (16 / 9) // = 115.6MiB
+const defaultMaxSecretSize = 65 * 1024 * 1024 * 16 / 9 // = 115.55MiB
 
 type (
 	// Customize holds the structure of the customization file
@@ -54,12 +55,15 @@ type (
 		DisableFileAttachment      bool     `json:"disableFileAttachment" yaml:"disableFileAttachment"`
 		MaxAttachmentSizeTotal     int64    `json:"maxAttachmentSizeTotal" yaml:"maxAttachmentSizeTotal"`
 
-		FileGroupsPath        string   `json:"-" yaml:"fileGroupsPath"`
-		MaxSecretSize         int64    `json:"-" yaml:"maxSecretSize"`
-		MetricsAllowedSubnets []string `json:"-" yaml:"metricsAllowedSubnets"`
-		OverlayFSPath         string   `json:"-" yaml:"overlayFSPath"`
-		RateLimitCreate       int      `json:"-" yaml:"rateLimitCreate"`
-		UseFormalLanguage     bool     `json:"-" yaml:"useFormalLanguage"`
+		FileGroupsPath        string        `json:"-" yaml:"fileGroupsPath"`
+		MaxSecretSize         int64         `json:"-" yaml:"maxSecretSize"`
+		MetricsAllowedSubnets []string      `json:"-" yaml:"metricsAllowedSubnets"`
+		OverlayFSPath         string        `json:"-" yaml:"overlayFSPath"`
+		RateLimitCreate       int           `json:"-" yaml:"rateLimitCreate"`
+		TrustedProxies        []string      `json:"-" yaml:"trustedProxies"`
+		ResolvedTrustedCIDRs  []*net.IPNet  `json:"-" yaml:"-"`
+		ResolvedTrustedIPs    []net.IP      `json:"-" yaml:"-"`
+		UseFormalLanguage     bool          `json:"-" yaml:"useFormalLanguage"`
 
 		FooterLinks []FooterLink `json:"footerLinks,omitempty" yaml:"footerLinks"`
 	}
@@ -148,4 +152,19 @@ func (c *Customize) ApplyFixes() {
 		}
 	}
 	c.ResolvedAcceptedExtensions = ExpandAcceptedFileTypes(c.AcceptedFileTypes, customGroups)
+
+	c.ResolvedTrustedCIDRs = nil
+	c.ResolvedTrustedIPs = nil
+	for _, entry := range c.TrustedProxies {
+		_, cidr, err := net.ParseCIDR(entry)
+		if err == nil {
+			c.ResolvedTrustedCIDRs = append(c.ResolvedTrustedCIDRs, cidr)
+			continue
+		}
+		if ip := net.ParseIP(entry); ip != nil {
+			c.ResolvedTrustedIPs = append(c.ResolvedTrustedIPs, ip)
+			continue
+		}
+		logrus.WithField("proxy", entry).Warn("invalid trusted proxy entry in customization file")
+	}
 }

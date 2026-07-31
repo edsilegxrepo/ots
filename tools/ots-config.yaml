@@ -1,0 +1,73 @@
+# Override the app-icon, present a path to the image to use, if unset
+# or empty the default FontAwesome icon will be displayed. Recommended
+# is a height of 30px.
+appIcon: ''
+
+# Override the app-title, if unset or empty the default app-title
+# "OTS - One Time Secret" will be used
+appTitle: '__ENTITY__ :: OTS - One Time Secret'
+
+# Disable display of the app-title (for example if you included the
+# title within the appIcon)
+disableAppTitle: false
+
+# Disable the dropdown and the API functionality to override the
+# secret expiry
+disableExpiryOverride: false
+
+# Disable the footer linking back to the project.
+disablePoweredBy: true
+
+# Disable the button to display and the generation of the QR-Code
+# for the secret URL
+disableQRSupport: false
+
+# Disable the switcher for dark / light theme in the top right corner
+# for example if your custom theme does not support two themes.
+disableThemeSwitcher: true
+
+# Override the choices to be displayed in the expiry dropdown. Values
+# are given in seconds and the order of the values controls the order
+# in the dropdown.
+# expiryChoices: [300, ...]
+
+# Custom path to override embedded resources. You can override any
+# file present in the `frontend` directory (which is baked into the
+# binary during compile-time). You also can add new files (for
+# example the appIcon given above). Those files are available at the
+# root of the application (i.e. an app.png would be served at
+# https://ots.example.com/app.png).
+overlayFSPath: /etc/ots/custom
+
+# Switch to formal translations for languages having those defined.
+# Languages not having a formal version will still display the normal
+# translations in the respective language.
+useFormalLanguage: false
+
+# Define which file types are selectable by the user when uploading
+# files to attach. This fuels the `accept` attribute of the file
+# select and requires the same format.
+#
+# Pay attention this is NOT suited as a security measure as this is
+# purely a frontend implementation and can easily be circumvented. The
+# client tool does NOT check those file types and the server is not
+# able to check them as it never sees the real content of the file.
+#
+# https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input/file#accept
+# acceptedFileTypes: ''
+acceptedFileTypes: 'image/*,text/plain,text/csv,application/pdf,application/xml,application/json,application/zip,application/pkcs8,application/pkcs10,application/pkcs12,application/pkix-cert,application/pkix-crl,application/pkcs7-mime,application/x-x509-ca-cert,application/x-x509-user-cert,application/x-pkcs7-crl,application/x-pem-file,application/x-pkcs12,application/x-pkcs7-certificates,application/x-pkcs7-certreqresp'
+
+# Disable the file attachment functionality alltogether. Keep in mind
+# this also is just a frontend configuration. The server cannot see
+# whether it got a 11kb secret or a 1kb secret and a 10kb file
+# attached as they are encrypted into one single blob.
+disableFileAttachment: false
+
+# Define how big all attachments might be in bytes. Leave it set to
+# zero to use the internal limit of 64 MiB (which is there to ensure
+# the encrypted object does not cause the frontend to break).
+#
+# This size is checked by the frontend, not on the server side! To
+# limit the size of data someone can send you limit the maximum body
+# size of the request in the proxy in front of OTS.
+maxAttachmentSizeTotal: 0

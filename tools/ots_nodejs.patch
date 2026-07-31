@@ -1,0 +1,10 @@
+--- ./ci/build.mjs.dist	2023-10-18 09:06:17.635046666 -0500
++++ ./ci/build.mjs	2023-10-18 10:16:59.591409138 -0500
+@@ -7,6 +7,7 @@
+   bundle: true,
+   define: {
+     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'dev'),
++    'process.setMaxListeners': '50',
+   },
+   entryPoints: ['src/main.js'],
+   legalComments: 'none',

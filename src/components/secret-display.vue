@@ -12,8 +12,9 @@
         <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
         <p v-html="$t('text-pre-reveal-hint')" />
         <div v-if="!securePassword" class="mb-3">
-          <label class="form-label">Enter Decryption Key:</label>
+          <label for="decryptionKeyInput" class="form-label">Enter Decryption Key:</label>
           <input
+            id="decryptionKeyInput"
             v-model="inputPassword"
             type="text"
             class="form-control"
@@ -52,7 +53,7 @@
             >
               <app-clipboard-button
                 :content="secret"
-                :title="$t('tooltip-copy-to-clipboard')"
+                :title="$t('tooltip-copy-secret-content')"
               />
               <a
                 class="btn btn-secondary"
@@ -111,7 +112,7 @@ export default defineComponent({
 			this.secretLoading = true;
 			const keyToUse = this.securePassword || this.inputPassword;
 			window.history.replaceState({}, "", window.location.href.split("#")[0]);
-			fetch(`api/get/${this.secretId}`)
+			fetch(`/api/get/${this.secretId}`)
 				.then((resp) => {
 					if (resp.status === 404) {
 						// Secret has already been consumed

@@ -1,0 +1,27 @@
+################################
+# OTS systemd environment
+################################
+
+# Redis connection string redis://USER:PWD@HOST:PORT/DB
+REDIS_URL="redis://default:__PASSWORD__@127.0.0.1:6379/0"
+
+# Key prefix to store the keys under (Default io.luzifer.ots)
+REDIS_KEY="com.__ENTITY__.ots"
+
+# Expiry of the keys in seconds (Default 0 = no expiry)
+# 3 days
+# SECRET_EXPIRY="259200"
+# 7 days
+SECRET_EXPIRY="604800"
+
+# Listener Bindings - IP/Port to listen on (default ":3000")
+OTS_LISTENER="127.0.0.1:3000"
+
+# Storage to use for putting secrets to (default: mem, can be redis as well)
+OTS_STORAGE="redis"
+
+# Set log level (debug, info, warning, error) (default "info")
+OTS_LOG_LEVEL="info"
+
+# YAML file containing the definitions of customizations
+OTS_CONFIG="/etc/ots/ots-config.yaml"

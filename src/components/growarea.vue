@@ -1,5 +1,6 @@
 <template>
   <textarea
+    :id="id"
     ref="area"
     v-model="data"
     style="resize: none;"
@@ -82,6 +83,11 @@ export default defineComponent({
 	name: "GrowArea",
 
 	props: {
+		id: {
+			default: "",
+			type: String,
+		},
+
 		rows: {
 			default: 4,
 			type: Number,

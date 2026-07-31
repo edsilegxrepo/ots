@@ -3,6 +3,7 @@
     v-if="hasClipboard"
     :class="{'btn': true, 'btn-primary': !copyToClipboardSuccess, 'btn-success': copyToClipboardSuccess}"
     :disabled="!content"
+    :title="title || $t('tooltip-copy-to-clipboard') || 'Copy to Clipboard'"
     @click="copy"
   >
     <i :class="{'fas fa-fw fa-clipboard': !copyToClipboardSuccess, 'fas fa-fw fa-circle-check': copyToClipboardSuccess}" />
@@ -41,6 +42,12 @@ export default defineComponent({
 	props: {
 		content: {
 			default: null,
+			required: false,
+			type: String,
+		},
+
+		title: {
+			default: "",
 			required: false,
 			type: String,
 		},

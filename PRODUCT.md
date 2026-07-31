@@ -71,18 +71,38 @@ The codebase adheres strictly to Go and TypeScript best practices, enforced by c
 
 ## 4. Command-Line Arguments & Configuration Parameters
 
-The server binary accepts configuration parameters via CLI flags or environment variables:
+### 4.1 Core Server CLI Flags & Environment Variables (`main.go`)
 
 | Argument Flag | Environment Variable | Data Type | Default Value | Description |
 |---|---|---|---|---|
-| `--listen` | `LISTEN` | `string` | `"0.0.0.0:3000"` | IP address and port to bind the HTTP server. |
+| `--listen` | `LISTEN` | `string` | `":3000"` | IP address/port to bind HTTP server. Default `:3000` hardens to loopback `127.0.0.1:3000` when TLS is disabled; explicit custom `--listen` overrides are honored with a security warning. |
 | `--storage-type` | `STORAGE_TYPE` | `string` | `"mem"` | Storage engine backend (`"mem"` or `"redis"`). |
-| `--redis-connection` | `REDIS_CONNECTION` | `string` | `"redis://localhost:6379/0"` | Redis connection URL (used when `--storage-type=redis`). |
-| `--secret-expiry` | `SECRET_EXPIRY` | `int64` | `86400` (24h) | Default secret expiration duration in seconds. |
-| `--max-secret-size` | `MAX_SECRET_SIZE` | `int64` | `121217024` (115.6MB) | Maximum HTTP request payload size limit in bytes. |
-| `--rate-limit-create` | `RATE_LIMIT_CREATE` | `int` | `30` | Sliding window rate limit cap (requests per IP per minute). |
-| `--customize` | `CUSTOMIZE` | `string` | `""` | Path to optional operator customization YAML file (`customize.yaml`). |
+| `--secret-expiry` | `SECRET_EXPIRY` | `int64` | `86400` (24h) | Default secret expiration duration in seconds (86400 = 24 hours). |
+| `--customize` | `CUSTOMIZE` | `string` | `""` | Path to operator customization file (`customize.yaml`). |
 | `--log-level` | `LOG_LEVEL` | `string` | `"info"` | Logging verbosity (`"debug"`, `"info"`, `"warn"`, `"error"`). |
+| `--log-requests` | `LOG_REQUESTS` | `bool` | `true` | Enable HTTP request logging via Logrus. |
+| `--enable-tls` | `ENABLE_TLS` | `bool` | `false` | Enable native HTTPS/TLS server support. |
+| `--cert-file` | `CERT_FILE` | `string` | `""` | Path to TLS certificate file (required when `--enable-tls` is set). |
+| `--key-file` | `KEY_FILE` | `string` | `""` | Path to TLS private key file (required when `--enable-tls` is set). |
+| `--version` | `VERSION` | `bool` | `false` | Print version information and exit. |
+
+### 4.2 Storage Engine Environment Variables (`pkg/storage/redis`)
+
+| Environment Variable | Data Type | Default Value | Description |
+|---|---|---|---|
+| `REDIS_URL` | `string` | `""` | Connection URL (`redis://<user>:<password>@<host>:<port>/<db_number>`). Required when `--storage-type=redis`. |
+| `REDIS_KEY` | `string` | `"io.luzifer.ots"` | Key prefix used for stored secrets in Redis. |
+
+### 4.3 Customization File Settings (`customize.yaml` / `pkg/customization`)
+
+| Setting Key | Data Type | Default Value | Description |
+|---|---|---|---|
+| `trustedProxies` | `[]string` | `[]` | List of trusted proxy CIDRs/IPs for anti-spoofing client IP extraction. |
+| `metricsAllowedSubnets` | `[]string` | `[]` | Whitelisted CIDR subnets allowed to query the `/metrics` endpoint. |
+| `maxSecretSize` | `int64` | `121217024` (115.6MB) | Maximum payload size cap per secret creation request. |
+| `maxAttachmentSizeTotal` | `int64` | `0` | Cumulative instance storage usage limit in bytes (0 = unlimited). |
+| `rateLimitCreate` | `int` | `30` | Max secret creation requests permitted per IP per sliding window minute. |
+| `disableSearchIndex` | `*bool` | `true` | Exclude instance from search engine indexing (`robots.txt` / `X-Robots-Tag`). |
 
 ---
 

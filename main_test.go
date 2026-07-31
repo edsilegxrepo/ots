@@ -6,10 +6,13 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -198,4 +201,50 @@ func TestUpdateStoredSecretsCount(t *testing.T) {
 	require.NoError(t, err)
 
 	updateStoredSecretsCount(store, testCollector)
+}
+
+func TestListenerHardening(t *testing.T) {
+	// Test default :3000 hardens to 127.0.0.1:3000 when TLS disabled
+	assert.Equal(t, "127.0.0.1:3000", hardenListener(":3000", false))
+
+	// Test custom --listen 0.0.0.0:8080 is respected when TLS disabled (with warning log)
+	assert.Equal(t, "0.0.0.0:8080", hardenListener("0.0.0.0:8080", false))
+
+	// Test TLS enabled retains original binding
+	assert.Equal(t, ":3000", hardenListener(":3000", true))
+	assert.Equal(t, "0.0.0.0:3000", hardenListener("0.0.0.0:3000", true))
+}
+
+func TestLogFormatNDJSON(t *testing.T) {
+	origFormat := cfg.LogFormat
+	defer func() { cfg.LogFormat = origFormat }()
+
+	cfg.LogFormat = "ndjson"
+	var buf bytes.Buffer
+	logrus.SetOutput(&buf)
+	logrus.SetFormatter(&logrus.JSONFormatter{TimestampFormat: time.RFC3339})
+
+	logrus.WithField("test_key", "test_val").Info("test NDJSON log entry")
+
+	output := buf.String()
+	assert.Contains(t, output, `"level":"info"`)
+	assert.Contains(t, output, `"msg":"test NDJSON log entry"`)
+	assert.Contains(t, output, `"test_key":"test_val"`)
+}
+
+func TestLogFilePathWriting(t *testing.T) {
+	tmpDir := t.TempDir()
+	logPath := filepath.Join(tmpDir, "test_ots.log")
+
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	require.NoError(t, err)
+	defer logFile.Close()
+
+	logrus.SetOutput(logFile)
+	logrus.SetFormatter(&logrus.JSONFormatter{TimestampFormat: time.RFC3339})
+	logrus.Info("written to file log")
+
+	content, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), `"msg":"written to file log"`)
 }

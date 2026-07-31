@@ -5,7 +5,9 @@
     ref="qrButton"
     class="btn btn-secondary"
     :disabled="!qrDataURL"
-    :title="$t('tooltip-qr-code') || 'QR Code for secret URL'"
+    :title="computedTitle"
+    :data-bs-title="computedTitle"
+    @mouseenter="fixTooltip"
   >
     <i class="fas fa-qrcode" />
   </button>
@@ -18,6 +20,10 @@ import { defineComponent } from "vue";
 
 export default defineComponent({
 	computed: {
+		computedTitle(): string {
+			return this.title || (this.$t("tooltip-qr-code") as string) || "QR Code for secret URL";
+		},
+
 		customize(): any {
 			return window.OTSCustomize || {};
 		},
@@ -30,6 +36,12 @@ export default defineComponent({
 	},
 
 	methods: {
+		fixTooltip(): void {
+			if (this.$refs.qrButton) {
+				(this.$refs.qrButton as HTMLElement).setAttribute("title", this.computedTitle);
+			}
+		},
+
 		generateQR(): void {
 			if (window.OTSCustomize.disableQRSupport) {
 				return;
@@ -50,6 +62,12 @@ export default defineComponent({
 	props: {
 		qrContent: {
 			required: true,
+			type: String,
+		},
+
+		title: {
+			default: "",
+			required: false,
 			type: String,
 		},
 	},
@@ -75,6 +93,10 @@ export default defineComponent({
 				placement: "left",
 				trigger: "focus",
 			});
+
+			if (this.$refs.qrButton) {
+				(this.$refs.qrButton as HTMLElement).setAttribute("title", this.computedTitle);
+			}
 		},
 	},
 });
