@@ -145,7 +145,9 @@ fi
 
 if [ -d "ci/translate" ]; then
   echo "==> Generating i18n translations..."
-  (cd ci/translate && go build -o translate_tool main.go 2>/dev/null || go build -o translate_tool)
+  if ! (cd ci/translate && go build -o translate_tool main.go 2>/dev/null); then
+    (cd ci/translate && go build -o translate_tool)
+  fi
   ./ci/translate/translate_tool || true
   rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2>/dev/null || true
 fi
@@ -317,7 +319,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
   # Wait for server readiness (up to 5 seconds)
   READY=false
-  for i in {1..10}; do
+  for _ in {1..10}; do
     if curl -s "${TEST_URL}/healthz" &>/dev/null; then
       READY=true
       break

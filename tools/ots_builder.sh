@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # ---------------------------
 #  ots_builder.sh
@@ -23,7 +23,6 @@ DISTRIB_TARGET="/opt/done"
 OS_PLATFORM="linux_amd64"
 BIN_NAME="ots_${OS_PLATFORM}"
 CLI_NAME="ots-cli_${OS_PLATFORM}"
-PATCH_LIST="ots_i18n.yaml.patch ots_nodejs.patch"
 
 BUILD_WINDOWS=false
 NO_PACKAGE=false
@@ -43,118 +42,113 @@ for arg in "$@"; do
   esac
 done
 
-function buildCode() {
+buildCode() {
   go get -u ./...
   go mod verify
   go mod tidy
-  GOOS=$1 GOARCH=amd64 CGO_ENABLED=0 go build -v -tags release -buildmode=pie -mod=readonly -trimpath -ldflags "-s -w -X main.version=${OTS_VERSION}-${OTS_TAG}" -o ${BIN_PATH}/$2
+  GOOS=$1 GOARCH=amd64 CGO_ENABLED=0 go build -v -tags release -buildmode=pie -mod=readonly -trimpath -ldflags "-s -w -X main.version=${OTS_VERSION}-${OTS_TAG}" -o "${BIN_PATH}/$2"
 }
 
 [ -z "${OTS_VERSION}" ] && exit 1
 
-if [ "$NO_PACKAGE" = "false" ];then
-  cd ${SOURCE_DIR}
+if [ "$NO_PACKAGE" = "false" ]; then
+  cd "${SOURCE_DIR}" || exit 1
 fi
-sudo rm -rf ${OTS_BASE}
-git clone ${OTS_REPO}.git
+sudo rm -rf "${OTS_BASE}"
+git clone "${OTS_REPO}.git"
 
-cd ${OTS_BASE}
+cd "${OTS_BASE}" || exit 1
 CURDIR="$(pwd)"
 BIN_PATH="${CURDIR}/bin"
-# OTS_TAG="$(git describe --tags --always || echo dev)"
 OTS_TAG="${OTS_VERSION_FULL#*-}"
 BUILD_LABEL="[$(date '+%Y%m%d-%H%M%S')|${BUILD_ID}-${OTS_VERSION}-${OTS_TAG}]"
 BIN_ARCHNAME="ots-${OTS_VERSION}-${OTS_TAG}-${OS_PLATFORM}"
 
 sed -i -n '/^  ca:/q;p' i18n.yaml
-echo -e "\nBuilding ${BUILD_ID^^} release: ${OTS_VERSION_FULL}"
-mkdir -p ${BIN_PATH}
-for p in ${SOURCE_DIR}/${BUILD_ID}_*.patch;do
-  echo "Applying ${p}"
-  patch -p1 < ${p} || {
-    echo "*** Error: patch failed"
-    exit 2
-  }
+printf "\nBuilding %s release: %s\n" "${BUILD_ID}" "${OTS_VERSION_FULL}"
+mkdir -p "${BIN_PATH}"
+for p in "${SOURCE_DIR}/${BUILD_ID}"_*.patch; do
+  if [ -f "$p" ]; then
+    echo "Applying ${p}"
+    patch -p1 < "${p}" || {
+      echo "*** Error: patch failed"
+      exit 2
+    }
+  fi
 done
 
 (cd ci/translate && go build)
 ./ci/translate/translate
 rm -f ci/translate/translate
 
-echo -e "\n${BUILD_LABEL} Generating NodeJS Frontend"
+printf "\n%s Generating NodeJS Frontend\n" "${BUILD_LABEL}"
 docker run --rm -i \
   -e ALPINE_BRANCH="${ALPINE_BRANCH}" -e ALPINE_RELEASE="${ALPINE_RELEASE}" \
-  -v ${CURDIR}:${CURDIR} -w ${CURDIR} ${BUILD_IMAGE} sh -exc "\
+  -v "${CURDIR}:${CURDIR}" -w "${CURDIR}" "${BUILD_IMAGE}" sh -exc "\
   sed -i \"s|/v\d\..*/|/v${ALPINE_BRANCH}/|g\" /etc/apk/repositories;\
   sed -i \"s|\d\..*|${ALPINE_RELEASE}|1\" /etc/alpine-release;\
   sed -i \"/^Welcome/s|\d\..*|${ALPINE_BRANCH}|1\" /etc/issue;\
   sed -i \"/^VERSION_ID/s|\d\.\d\{1,\}.*|${ALPINE_RELEASE}|1;/^PRETTY_NAME/s|v\d\.\d\{1,\}|v${ALPINE_BRANCH}|1\" /etc/os-release;\
   apk add --upgrade alpine-keys --allow-untrusted && apk update && apk upgrade --available;\
-  npm install -g npm@latest pnpm &>/dev/null;\
+  npm install -g npm@latest pnpm >/dev/null 2>&1;\
   node --version;npm --version;pnpm --version;\
   apk add make;\
   make frontend_prod && chown -R $(id -u) ."
 
-echo -e "\n${BUILD_LABEL} Downloading Fonts (Font-Awesome)"
+printf "\n%s Downloading Fonts (Font-Awesome)\n" "${BUILD_LABEL}"
 rm -rf frontend/{css,js,webfonts}
-curl -sSfL ${FONTAWESOME_REPO}/${FONTAWESOME_VER}.tar.gz | \
+curl -sSfL "${FONTAWESOME_REPO}/${FONTAWESOME_VER}.tar.gz" | \
   tar -vC frontend -xz --strip-components=1 --wildcards --exclude='*/js-packages' '*/css' '*/webfonts'
 
-echo -e "\n${BUILD_LABEL} Compiling Golang backend"
-buildCode linux ${BIN_NAME}
-pushd cmd/ots-cli &>/dev/null
-buildCode linux ${CLI_NAME}
-popd &>/dev/null
-strip -s ${BIN_PATH}/{${BIN_NAME},${CLI_NAME}}
+printf "\n%s Compiling Golang backend\n" "${BUILD_LABEL}"
+buildCode linux "${BIN_NAME}"
+(cd cmd/ots-cli && buildCode linux "${CLI_NAME}")
+strip -s "${BIN_PATH}/${BIN_NAME}" "${BIN_PATH}/${CLI_NAME}"
 
 if [ "$BUILD_WINDOWS" = "true" ]; then
-  echo -e "\n${BUILD_LABEL} Compiling Windows backend"
+  printf "\n%s Compiling Windows backend\n" "${BUILD_LABEL}"
   OS_PLATFORM_WIN="windows_amd64"
   BIN_NAME_WIN="ots_${OS_PLATFORM_WIN}.exe"
   CLI_NAME_WIN="ots-cli_${OS_PLATFORM_WIN}.exe"
   BIN_ARCHNAME_WIN="ots-${OTS_VERSION}-${OTS_TAG}-${OS_PLATFORM_WIN}"
 
-  buildCode windows ${BIN_NAME_WIN}
-  pushd cmd/ots-cli &>/dev/null
-  buildCode windows ${CLI_NAME_WIN}
-  popd &>/dev/null
+  buildCode windows "${BIN_NAME_WIN}"
+  (cd cmd/ots-cli && buildCode windows "${CLI_NAME_WIN}")
 fi
 
-${BIN_PATH}/${BIN_NAME} --version
-${BIN_PATH}/${CLI_NAME} help | head -1
-${BIN_PATH}/${BIN_NAME} ots_linux_amd64 --listen ${OTS_LISTENER} &
-curl -s http://${OTS_LISTENER} | pandoc -f html -t plain
-killall ${BIN_NAME} &>/dev/null || true
+"${BIN_PATH}/${BIN_NAME}" --version
+"${BIN_PATH}/${CLI_NAME}" help | head -1
+"${BIN_PATH}/${BIN_NAME}" ots_linux_amd64 --listen "${OTS_LISTENER}" &
+curl -s "http://${OTS_LISTENER}" | pandoc -f html -t plain
+killall "${BIN_NAME}" >/dev/null 2>&1 || true
 
-if [ "$NO_PACKAGE" = "false" ];then
-  echo -e "\n${BUILD_LABEL} Creating minimal archive (binaries only)"
-  tar Jcvf ${DISTRIB_TARGET}/${BIN_ARCHNAME}-bin.tar.xz -C ${BIN_PATH} ${BIN_NAME} ${CLI_NAME}
+if [ "$NO_PACKAGE" = "false" ]; then
+  printf "\n%s Creating minimal archive (binaries only)\n" "${BUILD_LABEL}"
+  tar Jcvf "${DISTRIB_TARGET}/${BIN_ARCHNAME}-bin.tar.xz" -C "${BIN_PATH}" "${BIN_NAME}" "${CLI_NAME}"
 
   if [ "$BUILD_WINDOWS" = "true" ]; then
-    echo -e "\n${BUILD_LABEL} Creating Windows ZIP archive"
+    printf "\n%s Creating Windows ZIP archive\n" "${BUILD_LABEL}"
     DISTRIB_WIN="${CURDIR}/distrib_win"
-    rm -rf ${DISTRIB_WIN}
-    mkdir -p ${DISTRIB_WIN}/{bin,etc/custom,log}
+    rm -rf "${DISTRIB_WIN}"
+    mkdir -p "${DISTRIB_WIN}"/bin "${DISTRIB_WIN}"/etc/custom "${DISTRIB_WIN}"/log
 
-    cp -af ${BIN_PATH}/${BIN_NAME_WIN} ${DISTRIB_WIN}/bin/ots.exe
-    cp -af ${BIN_PATH}/${CLI_NAME_WIN} ${DISTRIB_WIN}/bin/ots-cli.exe
+    cp -af "${BIN_PATH}/${BIN_NAME_WIN}" "${DISTRIB_WIN}/bin/ots.exe"
+    cp -af "${BIN_PATH}/${CLI_NAME_WIN}" "${DISTRIB_WIN}/bin/ots-cli.exe"
 
-    cp -af ${SOURCE_DIR}/ots-config.yaml ${DISTRIB_WIN}/etc/ots-config.yaml
-    cp -af ${SOURCE_DIR}/ots.sysconfig ${DISTRIB_WIN}/etc/ots.env
-    sed -i 's|/etc/ots/ots-config.yaml|c:/inetd/ots/etc/ots-config.yaml|g' ${DISTRIB_WIN}/etc/ots.env
-    sed -i 's|/etc/ots/custom|c:/inetd/ots/etc/custom|g' ${DISTRIB_WIN}/etc/ots-config.yaml
-    echo "ots-${OTS_VERSION}-${OTS_TAG}-windows_amd64" > ${DISTRIB_WIN}/etc/ots.version
+    cp -af "${SOURCE_DIR}/ots-config.yaml" "${DISTRIB_WIN}/etc/ots-config.yaml"
+    cp -af "${SOURCE_DIR}/ots.sysconfig" "${DISTRIB_WIN}/etc/ots.env"
+    sed -i 's|/etc/ots/ots-config.yaml|c:/inetd/ots/etc/ots-config.yaml|g' "${DISTRIB_WIN}/etc/ots.env"
+    sed -i 's|/etc/ots/custom|c:/inetd/ots/etc/custom|g' "${DISTRIB_WIN}/etc/ots-config.yaml"
+    echo "ots-${OTS_VERSION}-${OTS_TAG}-windows_amd64" > "${DISTRIB_WIN}/etc/ots.version"
 
-    pushd ${DISTRIB_WIN} &>/dev/null
-    zip -r ${DISTRIB_TARGET}/${BIN_ARCHNAME_WIN}.zip *
-    popd &>/dev/null
-    rm -rf ${DISTRIB_WIN}
+    (cd "${DISTRIB_WIN}" && zip -r "${DISTRIB_TARGET}/${BIN_ARCHNAME_WIN}.zip" ./*)
+    rm -rf "${DISTRIB_WIN}"
   fi
 
-  if [ "$BUILD_VENDOR" = "true" ];then
+  if [ "$BUILD_VENDOR" = "true" ]; then
     go mod vendor
-    cd ..
-    find ${OTS_BASE} -type f -exec file {} \; | grep "ELF" | cut -d ":" -f1 | xargs rm -fv
-    tar zcvf ${DISTRIB_TARGET}/${BIN_ARCHNAME}-vendor.tar.gz ${OTS_BASE}
+    cd .. || exit 1
+    find "${OTS_BASE}" -type f -exec file {} \; | grep "ELF" | cut -d ":" -f1 | xargs rm -fv
+    tar zcvf "${DISTRIB_TARGET}/${BIN_ARCHNAME}-vendor.tar.gz" "${OTS_BASE}"
   fi
 fi
