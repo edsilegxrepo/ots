@@ -21,6 +21,7 @@ BUILD_AUTO_VERSION=false
 BUILD_VALIDATE=false
 KILL_RUNNING=false
 AUTO_START=false
+UPDATE_DEPS=false
 OUTPUT_DIR="${ROOT_DIR}/testfiles/dist"
 BIN_DIR="${ROOT_DIR}/testfiles/bin"
 
@@ -68,6 +69,9 @@ for arg in "$@"; do
       AUTO_START=true
       KILL_RUNNING=true
       ;;
+    --update-deps|--upgrade-deps)
+      UPDATE_DEPS=true
+      ;;
     -*)
       echo "Unknown flag: $arg"
       exit 1
@@ -104,6 +108,29 @@ echo " Version: ${VERSION} | Tag: ${TAG} | English Only: ${BUILD_ENGLISH_ONLY}"
 echo "================================================================="
 
 cd "${ROOT_DIR}"
+
+if [ "${UPDATE_DEPS}" = "true" ]; then
+  echo "================================================================="
+  echo " ==> RUNNING FULL DEPENDENCY MAINTENANCE (--update-deps)"
+  echo "================================================================="
+  echo "1. Upgrading Go modules..."
+  go get -u ./...
+  go mod tidy
+  go mod verify
+
+  echo "2. Upgrading Node.js / Vue packages via pnpm..."
+  if command -v pnpm &>/dev/null; then
+    pnpm update --latest
+  elif command -v npm &>/dev/null; then
+    npm update
+  fi
+
+  echo "3. Auditing Go dependencies..."
+  if command -v govulncheck &>/dev/null; then
+    govulncheck ./... || true
+  fi
+  echo "================================================================="
+fi
 
 # Step 1: i18n Translation Generation (if translate tool present)
 if [ "${BUILD_ENGLISH_ONLY}" = "true" ]; then
