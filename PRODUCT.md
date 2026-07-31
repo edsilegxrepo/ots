@@ -20,21 +20,21 @@ This document provides complete operational, deployment, security assessment, an
 
 ## 2. Security Assessment
 
-### 🔒 Encryption in Transit
+### Encryption in Transit
 - **TLS 1.2 / 1.3 Requirement:** In production deployments, OTS must run behind an HTTPS-terminating reverse proxy (e.g. Nginx, Caddy, Traefik) or cloud load balancer enforcing TLS 1.2/1.3 with strong cipher suites.
 - **Zero-Knowledge Fragment Architecture:** Decryption passphrases are stored strictly in the URL fragment (`http://ots.local/#<secret_id>|<key>`). According to RFC 3986, HTTP user agents **never send URL fragments in HTTP request headers**, ensuring the decryption key never touches transit logs or server buffers.
 
-### 🔑 Secret Management & Expiration
+### Secret Management & Expiration
 - **Cryptographic Passphrase Generation:** Passphrases are generated using OS-level Cryptographically Secure Pseudorandom Number Generators (`crypto/rand` in Go, `window.crypto.getRandomValues` in JavaScript).
 - **Atomic One-Time Destruction:** Storage engines (`pkg/storage/memory`, `pkg/storage/redis`) execute atomic `ReadAndDestroy` operations. Once read, data blocks are erased from RAM or memory keyspace immediately.
 - **Background Expiration Pruning:** Unread secrets expire automatically according to configured TTL timers (default: 24 hours) via active background ticker routines.
 
-### 🛡️ Authentication Configuration & RBAC
+### Authentication Configuration & RBAC
 - **Frictionless Client Submission:** Secret creation (`POST /api/create`) and secret retrieval (`GET /api/get/{id}`) operate unauthenticated to allow seamless secret sharing.
 - **Metrics Endpoint RBAC (`metricsAllowedSubnets`):** Access to Prometheus telemetry (`GET /metrics`) is restricted using CIDR IP subnet whitelist filtering (`metricsAllowedSubnets: ["10.0.0.0/8", "127.0.0.1/32"]`).
 - **Unprivileged Runtime Context:** The server binary runs in an unprivileged user execution context (`nobody` or dedicated `ots` user, UID 10001). It does not require root privileges or raw socket access.
 
-### 📦 Dependency & Vulnerability Audit
+### Dependency & Vulnerability Audit
 All third-party libraries used in OTS are up-to-date and verified non-vulnerable across multiple security scanners:
 
 | Dependency / Module | Purpose | Security Audit Status |

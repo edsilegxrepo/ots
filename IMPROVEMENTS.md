@@ -4,7 +4,7 @@ This document outlines the selected GitHub issues and repository improvements pl
 
 ---
 
-## 📅 Roadmap Overview
+## Roadmap Overview
 
 | Phase | Category | Issue / Feature | Key Focus |
 |---|---|---|---|
@@ -18,7 +18,7 @@ This document outlines the selected GitHub issues and repository improvements pl
 
 ---
 
-## 🎯 Detailed Phase Specifications
+## Detailed Phase Specifications
 
 ### Phase 1: Quick Wins, UX Polish & Extension Improvements
 
