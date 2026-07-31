@@ -9,26 +9,26 @@ This document details the software architecture, design choices, operational dat
 ### System Architecture Diagram
 ```mermaid
 graph TD
-    subgraph Client Layer (Zero-Knowledge)
+    subgraph "Client Layer (Zero-Knowledge)"
         WebUI["Vue SPA Web Client<br/>(WebCrypto AES-256-CBC)"]
         CLIClient["Go CLI Client<br/>(cmd/ots-cli)"]
         SDKClient["Go SDK Engine<br/>(pkg/client)"]
     end
 
-    subgraph Network & Ingestion Layer
+    subgraph "Network & Ingestion Layer"
         TLS["HTTPS / TLS 1.3 Termination"]
         Mux["Gorilla Mux HTTP Router<br/>(api.go / main.go)"]
         RateLimiter["Sliding Window IP Rate Limiter<br/>(ratelimit.go)"]
     end
 
-    subgraph Core Engine Layer
+    subgraph "Core Engine Layer"
         APIServer["APIServer REST Controller<br/>(api.go)"]
         CapEngine["Cumulative Storage Cap Evaluator<br/>(maxAttachmentSizeTotal)"]
         CustEngine["Customization & Extension Manager<br/>(pkg/customization)"]
         MetricsVec["Prometheus Collector Vectors<br/>(pkg/metrics)"]
     end
 
-    subgraph Storage Abstraction Layer
+    subgraph "Storage Abstraction Layer"
         StoreIntf["Storage Interface<br/>(pkg/storage/storage.go)"]
         MemEngine["In-Memory Store<br/>(pkg/storage/memory)"]
         RedisEngine["Redis KV Store<br/>(pkg/storage/redis)"]
@@ -126,7 +126,7 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    subgraph Core Binaries & Submodules
+    subgraph "Core Binaries & Submodules"
         MainModule["github.com/Luzifer/ots<br/>(Main Server Binary)"]
         CLIModule["cmd/ots-cli<br/>(Standalone CLI Utility)"]
         ClientModule["pkg/client<br/>(Cryptographic Client SDK)"]
@@ -136,7 +136,7 @@ graph TD
         StorageRedis["pkg/storage/redis<br/>(Redis Distributed Store)"]
     end
 
-    subgraph Third-Party Libraries
+    subgraph "Third-Party Libraries"
         Mux["github.com/gorilla/mux<br/>(HTTP Router v1.8.1)"]
         OpenSSL["github.com/Luzifer/go-openssl/v4<br/>(PBKDF2 / AES Derivation)"]
         Prometheus["github.com/prometheus/client_golang<br/>(Metrics v1.24.1)"]
@@ -170,18 +170,18 @@ graph TD
 
 ```mermaid
 graph TD
-    subgraph Edge & Transport Security
+    subgraph "Edge & Transport Security"
         HTTPS["HTTPS / TLS 1.2+ Termination"]
         HeaderSec["Security Headers<br/>(Cache-Control: no-store, X-Robots-Tag: noindex)"]
     end
 
-    subgraph Ingestion & Rate Limiting Gate
+    subgraph "Ingestion & Rate Limiting Gate"
         RateLimitGate["IP Rate Limiter Gate<br/>(30 requests / minute per IP)"]
         PayloadGate["Payload Boundary Gate<br/>(MaxBytesReader & maxAttachmentSizeTotal)"]
         ExtFilterGate["Extension Policy Gate<br/>(Group Aliases: @images, @office)"]
     end
 
-    subgraph Access Control & Endpoint RBAC
+    subgraph "Access Control & Endpoint RBAC"
         PublicEndpoints["Public Unauthenticated Endpoints<br/>- POST /api/create<br/>- GET /api/get/{id}<br/>- GET /api/settings<br/>- GET /healthz"]
         RestrictedMetrics["Restricted Telemetry Endpoint<br/>- GET /metrics"]
         SubnetFilter["CIDR Subnet Whitelist Filter<br/>(metricsAllowedSubnets)"]
