@@ -1,0 +1,201 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/Luzifer/ots/pkg/storage/memory"
+)
+
+func TestHandleRobotsDisabled(t *testing.T) {
+	disable := true
+	cust.DisableSearchIndex = &disable
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/robots.txt", nil)
+	w := httptest.NewRecorder()
+
+	handleRobots(w, req)
+
+	res := w.Result()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Equal(t, "noindex, nofollow, noarchive, nosnippet", res.Header.Get("X-Robots-Tag"))
+	assert.Contains(t, w.Body.String(), "Disallow: /")
+}
+
+func TestHandleRobotsEnabled(t *testing.T) {
+	disable := false
+	cust.DisableSearchIndex = &disable
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/robots.txt", nil)
+	w := httptest.NewRecorder()
+
+	handleRobots(w, req)
+
+	res := w.Result()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Empty(t, res.Header.Get("X-Robots-Tag"))
+	assert.Contains(t, w.Body.String(), "Allow: /")
+
+	// Restore default
+	disableDefault := true
+	cust.DisableSearchIndex = &disableDefault
+}
+
+func TestRateLimiterIntegration(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	api.rateLimiter = newIPRateLimiter(2, 1*time.Minute)
+
+	req1 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewBufferString(`{"secret":"hello"}`))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.RemoteAddr = "10.0.0.1:12345"
+	w1 := httptest.NewRecorder()
+	api.handleCreate(w1, req1)
+	assert.Equal(t, http.StatusCreated, w1.Code)
+
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewBufferString(`{"secret":"hello2"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.RemoteAddr = "10.0.0.1:12345"
+	w2 := httptest.NewRecorder()
+	api.handleCreate(w2, req2)
+	assert.Equal(t, http.StatusCreated, w2.Code)
+
+	req3 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewBufferString(`{"secret":"hello3"}`))
+	req3.Header.Set("Content-Type", "application/json")
+	req3.RemoteAddr = "10.0.0.1:12345"
+	w3 := httptest.NewRecorder()
+	api.handleCreate(w3, req3)
+	assert.Equal(t, http.StatusTooManyRequests, w3.Code)
+}
+
+func TestCumulativeStorageCapIntegration(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+
+	cust.MaxAttachmentSizeTotal = 30 // Limit cumulative storage to 30 bytes
+
+	req1 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewBufferString(`{"secret":"123456789012345"}`)) // 15 bytes
+	req1.Header.Set("Content-Type", "application/json")
+	req1.RemoteAddr = "10.0.0.2:12345"
+	w1 := httptest.NewRecorder()
+	api.handleCreate(w1, req1)
+	require.Equal(t, http.StatusCreated, w1.Code)
+
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewBufferString(`{"secret":"12345678901234567890"}`)) // 20 bytes (total would be 35 > 30)
+	req2.Header.Set("Content-Type", "application/json")
+	req2.RemoteAddr = "10.0.0.2:12345"
+	w2 := httptest.NewRecorder()
+	api.handleCreate(w2, req2)
+	require.Equal(t, http.StatusInsufficientStorage, w2.Code)
+
+	cust.MaxAttachmentSizeTotal = 0 // Reset
+}
+
+func TestAssetDelivery(t *testing.T) {
+	// Request without dot
+	req1 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nodot", nil)
+	w1 := httptest.NewRecorder()
+	assetDelivery(w1, req1)
+	assert.Equal(t, http.StatusNotFound, w1.Code)
+
+	// Request for non-existent file with dot
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nonexistent.css", nil)
+	w2 := httptest.NewRecorder()
+	assetDelivery(w2, req2)
+	assert.Equal(t, http.StatusNotFound, w2.Code)
+}
+
+func TestHandleRemoveAcceptEncoding(t *testing.T) {
+	called := false
+	dummy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		assert.Empty(t, r.Header.Get("Accept-Encoding"))
+	})
+
+	h := handleRemoveAcceptEncoding(dummy)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+	assert.True(t, called)
+}
+
+func TestGetStorageByType(t *testing.T) {
+	sMem, err := getStorageByType("mem")
+	require.NoError(t, err)
+	assert.NotNil(t, sMem)
+
+	sUnknown, err := getStorageByType("unknown")
+	require.Error(t, err)
+	assert.Nil(t, sUnknown)
+}
+
+func TestSRICache(t *testing.T) {
+	cache := newSRICache()
+
+	val, found := cache.Get("nonexistent")
+	assert.False(t, found)
+	assert.Empty(t, val)
+
+	cache.Set("app.css", "sha384-dummyhash")
+	val, found = cache.Get("app.css")
+	assert.True(t, found)
+	assert.Equal(t, "sha384-dummyhash", val)
+}
+
+func TestAPIRegister(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+
+	api.Register(r)
+
+	// Test healthz endpoint
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// Test isWritable endpoint
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/isWritable", nil)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	assert.Equal(t, http.StatusNoContent, w2.Code)
+}
+
+func TestHandleIndex(t *testing.T) {
+	source, err := assets.ReadFile("frontend/dist/index.html")
+	if err != nil {
+		t.Skip("frontend/dist/index.html not embedded in test environment")
+		return
+	}
+	indexTpl = template.Must(template.New("index.html").Funcs(tplFuncs).Parse(string(source)))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	handleIndex(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Header().Get("Content-Security-Policy"), "script-src")
+	assert.Contains(t, w.Body.String(), "<html")
+}
+
+func TestUpdateStoredSecretsCount(t *testing.T) {
+	store := memory.New()
+	_, err := store.Create("secret_1", time.Hour)
+	require.NoError(t, err)
+
+	updateStoredSecretsCount(store, testCollector)
+}

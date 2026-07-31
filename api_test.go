@@ -1,3 +1,10 @@
+// Package main - API Server & Live E2E Test Suite
+//
+// Test Strategy Explanation:
+// - Unit & Integration Isolation: Tests API handlers (handleCreate, handleRead, handleSettings) against in-memory storage.
+// - Boundary & Validation Testing: Exercises expiry overrides, malformed JSON, rate limits, and total instance storage caps.
+// - Live Server E2E Verification: Uses httptest.NewServer with real Gorilla Mux routing to test 10MB attachments,
+//   group-based extension filtering (@images, @office), and Issue #208 dual-channel URL splitting (FetchWithKey).
 package main
 
 import (
@@ -10,10 +17,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Luzifer/ots/pkg/client"
 	"github.com/Luzifer/ots/pkg/customization"
 	"github.com/Luzifer/ots/pkg/metrics"
 	"github.com/Luzifer/ots/pkg/storage"
@@ -152,4 +162,245 @@ func newTestAPI(t *testing.T) (*apiServer, storage.Storage) {
 
 	store := memory.New()
 	return newAPI(store, testCollector), store
+}
+
+func TestHandleSettings(t *testing.T) {
+	api, _ := newTestAPI(t)
+	cust.AcceptedFileTypes = "@images"
+	cust.ApplyFixes()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/settings", nil)
+	w := httptest.NewRecorder()
+	api.handleSettings(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"resolvedAcceptedExtensions"`)
+	assert.Contains(t, w.Body.String(), `".png"`)
+}
+
+func TestHandleReadAndDestroy(t *testing.T) {
+	api, store := newTestAPI(t)
+
+	// Create secret
+	id, err := store.Create("secret_content", time.Hour)
+	require.NoError(t, err)
+
+	// Read secret
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/get/"+id, nil)
+	w := httptest.NewRecorder()
+	r := mux.NewRouter()
+	r.HandleFunc("/api/get/{id}", api.handleRead)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `"secret":"secret_content"`)
+
+	// Read again (destroyed) should return 404
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req)
+	assert.Equal(t, http.StatusNotFound, w2.Code)
+}
+
+func TestRequestInSubnetList(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
+	req.RemoteAddr = "192.168.1.50:12345"
+
+	subnets := []string{"192.168.1.0/24", "10.0.0.0/8"}
+	assert.True(t, requestInSubnetList(req, subnets))
+
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
+	req2.RemoteAddr = "172.16.0.1:12345"
+	assert.False(t, requestInSubnetList(req2, subnets))
+}
+
+func TestLargeSecretAndAttachmentSupport(t *testing.T) {
+	api, store := newTestAPI(t)
+
+	// Configure large max secret size (256MB = 268,435,456 bytes)
+	cust.MaxSecretSize = 256 * 1024 * 1024
+
+	// Create 5MB secret payload (5 * 1024 * 1024 bytes)
+	largeData := bytes.Repeat([]byte("A"), 5*1024*1024)
+	reqBody, err := json.Marshal(apiRequest{Secret: string(largeData)})
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	api.handleCreate(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code)
+
+	count, err := store.Count()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Exceeding custom MaxSecretSize should return 400 Bad Request
+	cust.MaxSecretSize = 100                          // Set max secret size limit to 100 bytes
+	overLimitSecret := bytes.Repeat([]byte("B"), 150) // 150 bytes exceeds 100 bytes
+	reqBody2, err := json.Marshal(apiRequest{Secret: string(overLimitSecret)})
+	require.NoError(t, err)
+
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/create", bytes.NewReader(reqBody2))
+	req2.Header.Set("Content-Type", "application/json")
+
+	api.handleCreate(w2, req2)
+	assert.Equal(t, http.StatusBadRequest, w2.Code)
+
+	cust.MaxSecretSize = 0 // Reset
+}
+
+func TestLiveOTSServerFullLifecycleE2E(t *testing.T) {
+	// 1. Initialize live local OTS server engine with Gorilla Mux router
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// 2. Create encrypted secret against live local OTS server
+	plainSecret := client.Secret{
+		Secret: "Secret created against live local OTS server engine",
+		Attachments: []client.SecretAttachment{
+			{
+				Name:    "live_attachment.txt",
+				Type:    "text/plain",
+				Content: []byte("E2E live server attachment payload"),
+			},
+		},
+	}
+
+	secretURL, expiresAt, err := client.Create(liveServer.URL, plainSecret, 15*time.Minute)
+	require.NoError(t, err)
+	assert.Contains(t, secretURL, liveServer.URL)
+	assert.Contains(t, secretURL, "#")
+	assert.False(t, expiresAt.IsZero())
+
+	// 3. Fetch and decrypt secret from live local OTS server
+	fetched, err := client.Fetch(secretURL)
+	require.NoError(t, err)
+	assert.Equal(t, "Secret created against live local OTS server engine", fetched.Secret)
+	require.Len(t, fetched.Attachments, 1)
+	assert.Equal(t, "live_attachment.txt", fetched.Attachments[0].Name)
+	assert.Equal(t, []byte("E2E live server attachment payload"), fetched.Attachments[0].Content)
+
+	// 4. Verify one-time read & destroy on live server
+	_, err = client.Fetch(secretURL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
+}
+
+func TestLiveServerLargeAttachmentsE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// 10MB live attachment payload
+	largePayload := bytes.Repeat([]byte("X"), 10*1024*1024)
+	secret := client.Secret{
+		Secret: "Secret with 10MB Large Attachment Payload",
+		Attachments: []client.SecretAttachment{
+			{
+				Name:    "large_dataset.bin",
+				Type:    "application/octet-stream",
+				Content: largePayload,
+			},
+		},
+	}
+
+	secretURL, _, err := client.Create(liveServer.URL, secret, 10*time.Minute)
+	require.NoError(t, err)
+	assert.NotEmpty(t, secretURL)
+
+	fetched, err := client.Fetch(secretURL)
+	require.NoError(t, err)
+	assert.Equal(t, "Secret with 10MB Large Attachment Payload", fetched.Secret)
+	require.Len(t, fetched.Attachments, 1)
+	assert.Equal(t, "large_dataset.bin", fetched.Attachments[0].Name)
+	assert.Equal(t, len(largePayload), len(fetched.Attachments[0].Content))
+	assert.Equal(t, largePayload[:100], fetched.Attachments[0].Content[:100])
+}
+
+func TestLiveServerExtensionFilteringE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// Configure accepted file types & group aliases
+	cust.AcceptedFileTypes = "@images, @office, .pdf, .txt"
+	cust.ApplyFixes()
+	defer func() {
+		cust.AcceptedFileTypes = ""
+		cust.ResolvedAcceptedExtensions = nil
+	}()
+
+	// Test 1: Allowed extensions (pdf & png)
+	assert.True(t, customization.IsFilenameAllowed("report.pdf", cust.ResolvedAcceptedExtensions))
+	assert.True(t, customization.IsFilenameAllowed("photo.PNG", cust.ResolvedAcceptedExtensions))
+
+	validSecret := client.Secret{
+		Secret: "Valid Secret Payload",
+		Attachments: []client.SecretAttachment{
+			{Name: "report.pdf", Type: "application/pdf", Content: []byte("PDF Content")},
+		},
+	}
+	secretURL, _, err := client.Create(liveServer.URL, validSecret, 5*time.Minute)
+	require.NoError(t, err)
+	assert.NotEmpty(t, secretURL)
+
+	// Test 2: Blocked extension (.exe)
+	assert.False(t, customization.IsFilenameAllowed("malware.exe", cust.ResolvedAcceptedExtensions))
+}
+
+func TestLiveServerDualChannelSplitKeyE2E(t *testing.T) {
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	secret := client.Secret{
+		Secret: "Top Secret Credentials for Dual-Channel Transmission",
+		Attachments: []client.SecretAttachment{
+			{Name: "key.pem", Type: "application/x-pem-file", Content: []byte("-----BEGIN PRIVATE KEY-----")},
+		},
+	}
+
+	unifiedURL, _, err := client.Create(liveServer.URL, secret, 10*time.Minute)
+	require.NoError(t, err)
+
+	// Split Unified URL into Channel A (Base Secret URL) & Channel B (Decryption Key)
+	baseURL, decryptionKey, err := client.SplitSecretURL(unifiedURL)
+	require.NoError(t, err)
+	assert.NotContains(t, baseURL, decryptionKey)
+	assert.NotEmpty(t, decryptionKey)
+
+	// Attempting to fetch base URL without decryption key fails
+	_, err = client.Fetch(baseURL)
+	assert.Error(t, err)
+
+	// Fetching base URL with separately transmitted decryption key succeeds
+	fetched, err := client.FetchWithKey(baseURL, decryptionKey)
+	require.NoError(t, err)
+	assert.Equal(t, "Top Secret Credentials for Dual-Channel Transmission", fetched.Secret)
+	require.Len(t, fetched.Attachments, 1)
+	assert.Equal(t, "key.pem", fetched.Attachments[0].Name)
+
+	// One-time read & destroy verification
+	_, err = client.FetchWithKey(baseURL, decryptionKey)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
 }

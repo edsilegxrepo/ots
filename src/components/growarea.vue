@@ -8,96 +8,104 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  created() {
-    this.data = this.value
-  },
+	created() {
+		this.data = this.value;
+	},
 
-  data() {
-    return {
-      data: '',
-    }
-  },
+	data() {
+		return {
+			data: "",
+		};
+	},
 
-  emits: ['input', 'pasteFile'],
+	emits: ["input", "pasteFile"],
 
-  methods: {
-    changeSize(): void {
-      if (!this.$refs.area) {
-        return
-      }
+	methods: {
+		changeSize(): void {
+			if (!this.$refs.area) {
+				return;
+			}
 
-      const verticalBorderSize = this.getStyle('borderTopWidth') + this.getStyle('borderBottomWidth') || 0
-      const verticalPaddingSize = this.getStyle('paddingTop') + this.getStyle('paddingBottom') || 0
+			const verticalBorderSize =
+				this.getStyle("borderTopWidth") + this.getStyle("borderBottomWidth") ||
+				0;
+			const verticalPaddingSize =
+				this.getStyle("paddingTop") + this.getStyle("paddingBottom") || 0;
 
-      const smallestHeight = this.getStyle('lineHeight') * this.rows + verticalBorderSize + verticalPaddingSize
-      this.$refs.area.style.height = `${smallestHeight}px`
+			const smallestHeight =
+				this.getStyle("lineHeight") * this.rows +
+				verticalBorderSize +
+				verticalPaddingSize;
+			this.$refs.area.style.height = `${smallestHeight}px`;
 
-      const newHeight = this.$refs.area.scrollHeight + verticalBorderSize
-      this.$refs.area.style.height = `${newHeight}px`
-    },
+			const newHeight = this.$refs.area.scrollHeight + verticalBorderSize;
+			this.$refs.area.style.height = `${newHeight}px`;
+		},
 
-    getStyle(name: string): number {
-      return parseInt(getComputedStyle(this.$refs.area, null)[name])
-    },
+		getStyle(name: string): number {
+			return parseInt(getComputedStyle(this.$refs.area, null)[name]);
+		},
 
-    handlePaste(evt: ClipboardEvent): void {
-      if ([...evt.clipboardData?.items || []]
-        .filter(item => item.kind !== 'string')
-        .length === 0) {
-        return
-      }
+		handlePaste(evt: ClipboardEvent): void {
+			if (
+				[...(evt.clipboardData?.items || [])].filter(
+					(item) => item.kind !== "string",
+				).length === 0
+			) {
+				return;
+			}
 
-      /*
-       * We have something else than text, prevent using clipboard and
-       * pasting and emit an event containing the file data
-       */
-      evt.stopPropagation()
-      evt.preventDefault()
+			/*
+			 * We have something else than text, prevent using clipboard and
+			 * pasting and emit an event containing the file data
+			 */
+			evt.stopPropagation();
+			evt.preventDefault();
 
-      for (const item of evt.clipboardData?.items || []) {
-        if (item.kind === 'string') {
-          continue
-        }
+			for (const item of evt.clipboardData?.items || []) {
+				if (item.kind === "string") {
+					continue;
+				}
 
-        this.$emit('pasteFile', item.getAsFile())
-      }
-    },
-  },
+				this.$emit("pasteFile", item.getAsFile());
+			}
+		},
+	},
 
-  mounted(): void {
-    this.changeSize()
-  },
+	mounted(): void {
+		this.changeSize();
+	},
 
-  name: 'GrowArea',
+	name: "GrowArea",
 
-  props: {
-    rows: {
-      default: 4,
-      type: Number,
-    },
+	props: {
+		rows: {
+			default: 4,
+			type: Number,
+		},
 
-    value: {
-      default: '',
-      type: String,
-    },
-  },
+		value: {
+			default: "",
+			type: String,
+		},
+	},
 
-  watch: {
-    data(to, from) {
-      this.changeSize()
-      if (to !== from) {
-        this.$emit('input', to)
-      }
-    },
+	watch: {
+		data(to, from) {
+			this.changeSize();
+			if (to !== from) {
+				this.$emit("input", to);
+			}
+		},
 
-    value(to) {
-      if (to !== this.data) {
-        this.data = to
-      }
-    },
-  },
-})
+		value(to) {
+			if (to !== this.data) {
+				this.data = to;
+			}
+		},
+	},
+});
 </script>

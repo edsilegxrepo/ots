@@ -10,41 +10,40 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  computed: {
-    hasClipboard(): boolean {
-      return Boolean(navigator.clipboard && navigator.clipboard.writeText)
-    },
-  },
+	computed: {
+		hasClipboard(): boolean {
+			return Boolean(navigator.clipboard?.writeText);
+		},
+	},
 
-  data() {
-    return {
-      copyToClipboardSuccess: false,
-    }
-  },
+	data() {
+		return {
+			copyToClipboardSuccess: false,
+		};
+	},
 
-  methods: {
-    copy(): void {
-      navigator.clipboard.writeText(this.content)
-        .then(() => {
-          this.copyToClipboardSuccess = true
-          window.setTimeout(() => {
-            this.copyToClipboardSuccess = false
-          }, 1500)
-        })
-    },
-  },
+	methods: {
+		copy(): void {
+			navigator.clipboard.writeText(this.content).then(() => {
+				this.copyToClipboardSuccess = true;
+				window.setTimeout(() => {
+					this.copyToClipboardSuccess = false;
+				}, 1500);
+			});
+		},
+	},
 
-  name: 'AppClipboardButton',
+	name: "AppClipboardButton",
 
-  props: {
-    content: {
-      default: null,
-      required: false,
-      type: String,
-    },
-  },
-})
+	props: {
+		content: {
+			default: null,
+			required: false,
+			type: String,
+		},
+	},
+});
 </script>

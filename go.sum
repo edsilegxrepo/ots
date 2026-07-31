@@ -1,3 +1,5 @@
+github.com/Luzifer/go-openssl/v4 v4.2.5 h1:4f4TfSkbbZ9P8oUK693MObcOSF8aeAHfTODN0sP7agM=
+github.com/Luzifer/go-openssl/v4 v4.2.5/go.mod h1:KbfjuBRys1mb5tqoKRB3BxSu931jieN44JkpVhEQOeg=
 github.com/Luzifer/go_helpers/accesslogger v0.1.2 h1:iDzSeFPrRIPmvWTERBkJuXIn2I9d64AVWT99Y8ZLJ28=
 github.com/Luzifer/go_helpers/accesslogger v0.1.2/go.mod h1:x4K138iYEIhpVAjoxuXyTTzKiZLJEu4Lu8DX+zeDUzw=
 github.com/Luzifer/go_helpers/file v0.6.2 h1:1r/Oo762+2y88K7GnH2zXwdHWBx75AvJxaSSGkxbhMI=
@@ -63,6 +65,8 @@ go.yaml.in/yaml/v2 v2.4.4 h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=
 go.yaml.in/yaml/v2 v2.4.4/go.mod h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ=
 go.yaml.in/yaml/v3 v3.0.4 h1:tfq32ie2Jv2UxXFdLJdh3jXuOzWiL1fo0bu/FbuKpbc=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
+golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=
+golang.org/x/crypto v0.53.0/go.mod h1:DNLU434OwVakk9PzuwV8w62mAJpRJL3vsgcfp4Qnsio=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
 golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 google.golang.org/protobuf v1.36.11 h1:fV6ZwhNocDyBLK0dj+fg8ektcVegBBuEolpbTQyBNVE=

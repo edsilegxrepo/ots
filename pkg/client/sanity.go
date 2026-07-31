@@ -8,10 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
-
-	"github.com/ryanuber/go-glob"
 
 	"github.com/Luzifer/ots/pkg/customization"
 )
@@ -28,7 +25,6 @@ var (
 	ErrAttachmentTypeNotAllowed = errors.New("attachment type is not allowed")
 
 	errSettingsNotFound = errors.New("settings not found")
-	mimeRegex           = regexp.MustCompile(`^(?:[a-z]+|\*)\/(?:[a-zA-Z0-9.+_-]+|\*)$`)
 )
 
 // SanityCheck fetches the instance settings and validates the secret
@@ -61,43 +57,18 @@ func SanityCheck(instanceURL string, secret Secret) error {
 
 	// Check for allowed types
 	if cust.AcceptedFileTypes != "" {
-		allowed := strings.Split(cust.AcceptedFileTypes, ",")
+		allowedExts := cust.ResolvedAcceptedExtensions
+		if len(allowedExts) == 0 {
+			allowedExts = customization.ExpandAcceptedFileTypes(cust.AcceptedFileTypes, nil)
+		}
 		for _, a := range secret.Attachments {
-			if !attachmentAllowed(a, allowed) {
+			if !customization.IsFilenameAllowed(a.Name, allowedExts) {
 				return ErrAttachmentTypeNotAllowed
 			}
 		}
 	}
 
 	return nil
-}
-
-func attachmentAllowed(file SecretAttachment, allowed []string) bool {
-	mimeType, _, _ := strings.Cut(file.Type, ";")
-	logger := Logger.WithField("content-type", mimeType)
-
-	for _, a := range allowed {
-		switch {
-		case mimeRegex.MatchString(a):
-			// That's a mime type
-			if glob.Glob(a, mimeType) {
-				// The mime "glob" matches the file type
-				logger.WithField("allowed_by", a).Debug("attachment allowed")
-				return true
-			}
-
-		case a[0] == '.':
-			// That's a file extension
-			if strings.HasSuffix(file.Name, a) {
-				// The filename has the right extension
-				logger.WithField("allowed_by", a).Debug("attachment allowed")
-				return true
-			}
-		}
-	}
-
-	logger.Debug("attachment type not allowed")
-	return false
 }
 
 func loadSettings(instanceURL string) (c customization.Customize, err error) {

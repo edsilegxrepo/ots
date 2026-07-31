@@ -4,9 +4,9 @@ package tplfunc
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"maps"
 	"strings"
-	"text/template"
 )
 
 // FuncMap returns template helper functions for Sprig-compatible templates.

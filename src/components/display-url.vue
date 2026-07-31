@@ -1,6 +1,8 @@
 <!-- eslint-disable vue/no-v-html -->
 <template>
   <div class="card border-success-subtle mb-3">
+    <!-- Safe: Trusted internal translation string from i18n.yaml -->
+    <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
     <div
       class="card-header bg-success-subtle"
       v-html="$t('title-secret-created')"
@@ -9,6 +11,8 @@
       v-if="!burned"
       class="card-body"
     >
+      <!-- Safe: Trusted internal translation string from i18n.yaml -->
+      <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
       <p v-html="$t('text-pre-url')" />
       <div class="input-group mb-3">
         <input
@@ -32,6 +36,32 @@
           <i class="fas fa-fire fa-fw" />
         </button>
       </div>
+
+      <!-- Dual Channel Link Section -->
+      <div class="card bg-body-tertiary mb-3">
+        <div class="card-body p-3">
+          <h6 class="card-subtitle mb-2 text-body-secondary"><i class="fas fa-shield-halved me-1" /> Dual-Channel Delivery (Key Separated)</h6>
+          <div class="row g-2">
+            <div class="col-md-7">
+              <label class="form-label small mb-1">Short Link (without key):</label>
+              <div class="input-group input-group-sm">
+                <input class="form-control" type="text" readonly :value="shortUrl">
+                <app-clipboard-button :content="shortUrl" :title="$t('tooltip-copy-to-clipboard')" />
+              </div>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label small mb-1">Decryption Key:</label>
+              <div class="input-group input-group-sm">
+                <input class="form-control" type="text" readonly :value="securePassword">
+                <app-clipboard-button :content="securePassword" :title="$t('tooltip-copy-to-clipboard')" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Safe: Trusted internal translation string from i18n.yaml -->
+      <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
       <p v-html="$t('text-burn-hint')" />
       <p v-if="expiresAt">
         {{ $t('text-burn-time') }}
@@ -48,68 +78,71 @@
 </template>
 
 <script lang="ts">
-import appClipboardButton from './clipboard-button.vue'
-import appQrButton from './qr-button.vue'
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
+import appClipboardButton from "./clipboard-button.vue";
+import appQrButton from "./qr-button.vue";
 
 export default defineComponent({
-  components: { appClipboardButton, appQrButton },
+	components: { appClipboardButton, appQrButton },
 
-  computed: {
-    secretUrl(): string {
-      return [
-        window.location.href.split('#')[0],
-        encodeURIComponent([
-          this.secretId,
-          this.securePassword,
-        ].join('|')),
-      ].join('#')
-    },
-  },
+	computed: {
+		secretUrl(): string {
+			return [
+				window.location.href.split("#")[0],
+				encodeURIComponent([this.secretId, this.securePassword].join("|")),
+			].join("#");
+		},
 
-  data() {
-    return {
-      burned: false,
-      popover: null,
-    }
-  },
+		shortUrl(): string {
+			return [
+				window.location.href.split("#")[0],
+				encodeURIComponent(this.secretId),
+			].join("#");
+		},
+	},
 
-  methods: {
-    burnSecret(): Promise<void> {
-      return fetch(`api/get/${this.secretId}`)
-        .then(() => {
-          this.burned = true
-        })
-    },
+	data() {
+		return {
+			burned: false,
+			popover: null,
+		};
+	},
 
-    selectURL(): void {
-      this.$refs.secretUrl.select()
-    },
-  },
+	methods: {
+		burnSecret(): Promise<void> {
+			return fetch(`api/get/${this.secretId}`).then(() => {
+				this.burned = true;
+			});
+		},
 
-  mounted(): void {
-    // Give the interface a moment to transistion and focus
-    window.setTimeout(() => this.$refs.secretUrl.focus(), 100)
-  },
+		selectURL(): void {
+			this.$refs.secretUrl.select();
+		},
+	},
 
-  name: 'AppDisplayURL',
+	mounted(): void {
+		// Give the interface a moment to transistion and focus
+		window.setTimeout(() => this.$refs.secretUrl.focus(), 100);
+	},
 
-  props: {
-    expiresAt: {
-      default: null,
-      required: false,
-      type: Date,
-    },
+	name: "AppDisplayURL",
 
-    secretId: {
-      required: true,
-      type: String,
-    },
+	props: {
+		expiresAt: {
+			default: null,
+			required: false,
+			type: Date,
+		},
 
-    securePassword: {
-      required: true,
-      type: String,
-    },
-  },
-})
+		secretId: {
+			required: true,
+			type: String,
+		},
+
+		securePassword: {
+			required: true,
+			type: String,
+		},
+	},
+});
 </script>

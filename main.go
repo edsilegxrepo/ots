@@ -5,12 +5,12 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"mime"
 	"net/http"
 	"os"
 	"strings"
-	"text/template"
 	"time"
 
 	filehelpers "github.com/Luzifer/go_helpers/file"
@@ -132,6 +132,8 @@ func main() {
 			return requestInSubnetList(r, cust.MetricsAllowedSubnets)
 		})
 
+	r.HandleFunc("/robots.txt", handleRobots).
+		Methods(http.MethodGet)
 	r.HandleFunc("/", handleIndex).
 		Methods(http.MethodGet)
 	r.PathPrefix("/").HandlerFunc(assetDelivery).
@@ -199,9 +201,24 @@ func assetDelivery(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", mime.TypeByExtension(ext))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// Safe: Serving static binary/text frontend asset bytes read from embedded filesystem
+	// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter
 	if _, err = w.Write(assetData); err != nil { //#nosec:G705 // False positive
 		logrus.WithError(err).Error("writing asset data")
 	}
+}
+
+func handleRobots(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if cust.IsSearchIndexDisabled() {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet")
+		_, _ = fmt.Fprintln(w, "User-agent: *")
+		_, _ = fmt.Fprintln(w, "Disallow: /")
+		return
+	}
+
+	_, _ = fmt.Fprintln(w, "User-agent: *")
+	_, _ = fmt.Fprintln(w, "Allow: /")
 }
 
 func handleIndex(w http.ResponseWriter, _ *http.Request) {
@@ -224,6 +241,9 @@ func handleIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("X-Xss-Protection", "1; mode=block")
 	w.Header().Set("Content-Security-Policy", policy.ToHeaderValue())
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if cust.IsSearchIndexDisabled() {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet")
+	}
 
 	if err := indexTpl.Execute(w, struct {
 		Customize          customization.Customize

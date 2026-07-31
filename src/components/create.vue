@@ -4,10 +4,14 @@
     v-if="!showCreateForm"
     class="card border-info-subtle mb-3"
   >
+    <!-- Safe: Trusted internal translation string from i18n.yaml -->
+    <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
     <div
       class="card-header bg-info-subtle"
       v-html="$t('title-secret-create-disabled')"
     />
+    <!-- Safe: Trusted internal translation string from i18n.yaml -->
+    <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
     <div
       class="card-body"
       v-html="$t('text-secret-create-disabled')"
@@ -19,11 +23,20 @@
     v-else
     class="card border-primary-subtle mb-3"
   >
+    <!-- Safe: Trusted internal translation string from i18n.yaml -->
+    <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
     <div
       class="card-header bg-primary-subtle"
       v-html="$t('title-new-secret')"
     />
     <div class="card-body">
+      <!-- Safe: Administrator configured custom banner HTML in customize.yaml -->
+      <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
+      <div
+        v-if="customize.customBannerHTML"
+        class="alert alert-info mb-3"
+        v-html="customize.customBannerHTML"
+      />
       <form
         class="row"
         @submit.prevent="createSecret"
@@ -49,7 +62,7 @@
             class="form-control"
             type="file"
             multiple
-            :accept="customize.acceptedFileTypes"
+            :accept="acceptedTypesPattern"
             @change="handleSelectFiles"
           >
           <div class="form-text">
@@ -122,25 +135,25 @@
 </template>
 
 <script lang="ts">
-import appCrypto from '../crypto.ts'
-import { bytesToHuman } from '../helpers'
-import { defineComponent } from 'vue'
-import FilesDisplay from './fileDisplay.vue'
-import GrowArea from './growarea.vue'
-import OTSMeta from '../ots-meta'
+import { defineComponent } from "vue";
+import appCrypto from "../crypto.ts";
+import { bytesToHuman } from "../helpers";
+import OTSMeta from "../ots-meta";
+import FilesDisplay from "./fileDisplay.vue";
+import GrowArea from "./growarea.vue";
 
 const defaultExpiryChoices = [
-  90 * 86400, // 90 days
-  30 * 86400, // 30 days
-  7 * 86400, // 7 days
-  3 * 86400, // 3 days
-  24 * 3600, // 1 day
-  12 * 3600, // 12 hours
-  4 * 3600, // 4 hours
-  60 * 60, // 1 hour
-  30 * 60, // 30 minutes
-  5 * 60, // 5 minutes
-]
+	90 * 86400, // 90 days
+	30 * 86400, // 30 days
+	7 * 86400, // 7 days
+	3 * 86400, // 3 days
+	24 * 3600, // 1 day
+	12 * 3600, // 12 hours
+	4 * 3600, // 4 hours
+	60 * 60, // 1 hour
+	30 * 60, // 30 minutes
+	5 * 60, // 5 minutes
+];
 
 /*
  * We define an internal max file-size which cannot get exceeded even
@@ -151,266 +164,323 @@ const defaultExpiryChoices = [
  * that will appear somewhen in the future but for now we just "fix"
  * the issue by disallowing bigger files.
  */
-const internalMaxFileSize = 64 * 1024 * 1024 // 64 MiB
+const internalMaxFileSize = 64 * 1024 * 1024; // 64 MiB
 
-const passwordCharset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-const passwordLength = 20
-const passwordRandomLimit = Math.floor(256 / passwordCharset.length) * passwordCharset.length
+const passwordCharset =
+	"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const passwordLength = 20;
+const passwordRandomLimit =
+	Math.floor(256 / passwordCharset.length) * passwordCharset.length;
 
 export default defineComponent({
-  components: { FilesDisplay, GrowArea },
+	components: { FilesDisplay, GrowArea },
 
-  computed: {
-    canCreate(): boolean {
-      return (this.secret.trim().length > 0 || this.selectedFileMeta.length > 0) && !this.maxFileSizeExceeded && !this.invalidFilesSelected
-    },
+	computed: {
+		canCreate(): boolean {
+			return (
+				(this.secret.trim().length > 0 || this.selectedFileMeta.length > 0) &&
+				!this.maxFileSizeExceeded &&
+				!this.invalidFilesSelected
+			);
+		},
 
-    customize(): any {
-      return window.OTSCustomize || {}
-    },
+		customize(): any {
+			return window.OTSCustomize || {};
+		},
 
-    expiryChoices(): Record<string, string | null>[] {
-      const choices = [{ text: this.$t('expire-default'), value: null as string | null }]
+		expiryChoices(): Record<string, string | null>[] {
+			const choices: Record<string, string | null>[] = [];
 
-      for (const choice of this.customize.expiryChoices || defaultExpiryChoices) {
-        if (window.maxSecretExpire > 0 && choice > window.maxSecretExpire) {
-          continue
-        }
+			if (!this.customize.disableDefaultExpiry) {
+				let defaultLabel = this.$t("expire-default");
+				if (window.maxSecretExpire > 0) {
+					const choice = window.maxSecretExpire;
+					let defaultDuration = "";
+					if (choice >= 86400) {
+						defaultDuration = this.$t(
+							"expire-n-days",
+							Math.round(choice / 86400),
+						);
+					} else if (choice >= 3600) {
+						defaultDuration = this.$t(
+							"expire-n-hours",
+							Math.round(choice / 3600),
+						);
+					} else if (choice >= 60) {
+						defaultDuration = this.$t(
+							"expire-n-minutes",
+							Math.round(choice / 60),
+						);
+					} else {
+						defaultDuration = this.$t("expire-n-seconds", choice);
+					}
+					defaultLabel += ` (${defaultDuration})`;
+				}
+				choices.push({ text: defaultLabel, value: null as string | null });
+			}
 
-        const option = { text: '', value: choice }
-        if (choice >= 86400) {
-          option.text = this.$t('expire-n-days', Math.round(choice / 86400))
-        } else if (choice >= 3600) {
-          option.text = this.$t('expire-n-hours', Math.round(choice / 3600))
-        } else if (choice >= 60) {
-          option.text = this.$t('expire-n-minutes', Math.round(choice / 60))
-        } else {
-          option.text = this.$t('expire-n-seconds', choice)
-        }
+			for (const choice of this.customize.expiryChoices ||
+				defaultExpiryChoices) {
+				if (window.maxSecretExpire > 0 && choice > window.maxSecretExpire) {
+					continue;
+				}
 
-        choices.push(option)
-      }
+				const option = { text: "", value: String(choice) };
+				if (choice >= 86400) {
+					option.text = this.$t("expire-n-days", Math.round(choice / 86400));
+				} else if (choice >= 3600) {
+					option.text = this.$t("expire-n-hours", Math.round(choice / 3600));
+				} else if (choice >= 60) {
+					option.text = this.$t("expire-n-minutes", Math.round(choice / 60));
+				} else {
+					option.text = this.$t("expire-n-seconds", choice);
+				}
 
-      return choices
-    },
+				choices.push(option);
+			}
 
-    invalidFilesSelected(): boolean {
-      if (this.customize.acceptedFileTypes === '') {
-        // No limitation configured, no need to check
-        return false
-      }
+			return choices;
+		},
 
-      const accepted = this.customize.acceptedFileTypes.split(',')
-      for (const fm of this.selectedFileMeta) {
-        let isAccepted = false
+		invalidFilesSelected(): boolean {
+			if (this.customize.acceptedFileTypes === "") {
+				// No limitation configured, no need to check
+				return false;
+			}
 
-        for (const a of accepted) {
-          isAccepted ||= this.isAcceptedBy(fm, a)
-        }
+			const accepted = this.customize.acceptedFileTypes.split(",");
+			for (const fm of this.selectedFileMeta) {
+				let isAccepted = false;
 
-        if (!isAccepted) {
-          // Well we only needed one rejected
-          return true
-        }
-      }
+				for (const a of accepted) {
+					isAccepted ||= this.isAcceptedBy(fm, a);
+				}
 
-      // We found no reason to reject: This is fine!
-      return false
-    },
+				if (!isAccepted) {
+					// Well we only needed one rejected
+					return true;
+				}
+			}
 
-    isSecureEnvironment(): boolean {
-      return Boolean(window.crypto.subtle)
-    },
+			// We found no reason to reject: This is fine!
+			return false;
+		},
 
-    maxFileSize(): number {
-      return this.customize.maxAttachmentSizeTotal === 0 ? internalMaxFileSize : Math.min(internalMaxFileSize, this.customize.maxAttachmentSizeTotal)
-    },
+		isSecureEnvironment(): boolean {
+			return Boolean(window.crypto.subtle);
+		},
 
-    maxFileSizeExceeded(): boolean {
-      return this.fileSize > this.maxFileSize
-    },
+		maxFileSize(): number {
+			return this.customize.maxAttachmentSizeTotal === 0
+				? internalMaxFileSize
+				: Math.min(internalMaxFileSize, this.customize.maxAttachmentSizeTotal);
+		},
 
-    showCreateForm(): boolean {
-      return this.canWrite && this.isSecureEnvironment
-    },
-  },
+		maxFileSizeExceeded(): boolean {
+			return this.fileSize > this.maxFileSize;
+		},
 
-  created(): void {
-    this.checkWriteAccess()
-  },
+		showCreateForm(): boolean {
+			return this.canWrite && this.isSecureEnvironment;
+		},
 
-  data() {
-    return {
-      attachedFiles: [],
-      canWrite: null,
-      createRunning: false,
-      fileSize: 0,
-      secret: '',
-      securePassword: null,
-      selectedExpiry: null,
-      selectedFileMeta: [],
-    }
-  },
+		acceptedTypesPattern(): string {
+			if (
+				Array.isArray((this.customize as any).resolvedAcceptedExtensions) &&
+				(this.customize as any).resolvedAcceptedExtensions.length > 0
+			) {
+				return (this.customize as any).resolvedAcceptedExtensions.join(",");
+			}
+			return this.customize.acceptedFileTypes || "";
+		},
+	},
 
-  emits: ['error', 'navigate'],
+	created(): void {
+		this.checkWriteAccess();
+	},
 
-  methods: {
-    bytesToHuman,
+	data() {
+		return {
+			attachedFiles: [],
+			canWrite: null,
+			createRunning: false,
+			fileSize: 0,
+			secret: "",
+			securePassword: null,
+			selectedExpiry: null,
+			selectedFileMeta: [],
+		};
+	},
 
-    checkWriteAccess(): Promise<void> {
-      return fetch('api/isWritable', {
-        credentials: 'same-origin',
-        method: 'GET',
-        redirect: 'error',
-      })
-        .then(resp => {
-          if (resp.status !== 204) {
-            throw new Error(`unexpected status: ${resp.status}`)
-          }
-          this.canWrite = true
-        })
-        .catch(() => {
-          this.canWrite = false
-        })
-    },
+	emits: ["error", "navigate"],
 
-    // createSecret executes the secret creation after encrypting the secret
-    createSecret(): void {
-      if (!this.canCreate) {
-        return
-      }
+	methods: {
+		bytesToHuman,
 
-      // Encoding large files takes a while, prevent duplicate click on "create"
-      this.createRunning = true
+		checkWriteAccess(): Promise<void> {
+			return fetch("api/isWritable", {
+				credentials: "same-origin",
+				method: "GET",
+				redirect: "error",
+			})
+				.then((resp) => {
+					if (resp.status !== 204) {
+						throw new Error(`unexpected status: ${resp.status}`);
+					}
+					this.canWrite = true;
+				})
+				.catch(() => {
+					this.canWrite = false;
+				});
+		},
 
-      let password = ''
+		// createSecret executes the secret creation after encrypting the secret
+		createSecret(): void {
+			if (!this.canCreate) {
+				return;
+			}
 
-      while (password.length < passwordLength) {
-        const values = window.crypto.getRandomValues(new Uint8Array(passwordLength))
+			// Encoding large files takes a while, prevent duplicate click on "create"
+			this.createRunning = true;
 
-        for (const n of values) {
-          if (n >= passwordRandomLimit) {
-            continue
-          }
+			let password = "";
 
-          password += passwordCharset[n % passwordCharset.length]
+			while (password.length < passwordLength) {
+				const values = window.crypto.getRandomValues(
+					new Uint8Array(passwordLength),
+				);
 
-          if (password.length === passwordLength) {
-            break
-          }
-        }
-      }
+				for (const n of values) {
+					if (n >= passwordRandomLimit) {
+						continue;
+					}
 
-      this.securePassword = password
+					password += passwordCharset[n % passwordCharset.length];
 
-      const meta = new OTSMeta()
-      meta.secret = this.secret
+					if (password.length === passwordLength) {
+						break;
+					}
+				}
+			}
 
-      if (this.attachedFiles.length > 0) {
-        for (const f of this.attachedFiles) {
-          meta.files.push(f.fileObj)
-        }
-      }
+			this.securePassword = password;
 
-      meta.serialize()
-        .then(secret => appCrypto.enc(secret, this.securePassword))
-        .then(secret => {
-          let reqURL = 'api/create'
-          if (this.selectedExpiry !== null) {
-            reqURL = `api/create?expire=${this.selectedExpiry}`
-          }
+			const meta = new OTSMeta();
+			meta.secret = this.secret;
 
-          return fetch(reqURL, {
-            body: JSON.stringify({ secret }),
-            headers: {
-              'content-type': 'application/json',
-            },
-            method: 'POST',
-          })
-            .then(resp => {
-              if (resp.status !== 201) {
-                // Server says "no"
-                this.$emit('error', this.$t('alert-something-went-wrong'))
-                return
-              }
+			if (this.attachedFiles.length > 0) {
+				for (const f of this.attachedFiles) {
+					meta.files.push(f.fileObj);
+				}
+			}
 
-              resp.json()
-                .then(data => {
-                  this.$emit('navigate', {
-                    path: '/display-secret-url',
-                    query: {
-                      expiresAt: data.expires_at,
-                      secretId: data.secret_id,
-                      securePassword: this.securePassword,
-                    },
-                  })
-                })
-            })
-            .catch(() => {
-              // Network error
-              this.$emit('error', this.$t('alert-something-went-wrong'))
-            })
-        })
-    },
+			meta
+				.serialize()
+				.then((secret) => appCrypto.enc(secret, this.securePassword))
+				.then((secret) => {
+					let reqURL = "api/create";
+					if (this.selectedExpiry !== null) {
+						reqURL = `api/create?expire=${this.selectedExpiry}`;
+					}
 
-    deleteFile(fileId: string): void {
-      this.attachedFiles = [...this.attachedFiles].filter(file => file.id !== fileId)
-      this.updateFileMeta()
-    },
+					return fetch(reqURL, {
+						body: JSON.stringify({ secret }),
+						headers: {
+							"content-type": "application/json",
+						},
+						method: "POST",
+					})
+						.then((resp) => {
+							if (resp.status !== 201) {
+								// Server says "no"
+								this.$emit("error", this.$t("alert-something-went-wrong"));
+								return;
+							}
 
-    handlePasteFile(file: File): void {
-      this.attachedFiles.push({
-        fileObj: file,
-        id: window.crypto.randomUUID(),
-        name: file.name,
-        size: file.size,
-        type: file.type,
-      })
-      this.updateFileMeta()
-    },
+							resp.json().then((data) => {
+								this.$emit("navigate", {
+									path: "/display-secret-url",
+									query: {
+										expiresAt: data.expires_at,
+										secretId: data.secret_id,
+										securePassword: this.securePassword,
+									},
+								});
+							});
+						})
+						.catch(() => {
+							// Network error
+							this.$emit("error", this.$t("alert-something-went-wrong"));
+						});
+				});
+		},
 
-    handleSelectFiles(): void {
-      for (const file of this.$refs.createSecretFiles.files) {
-        this.attachedFiles.push({
-          fileObj: file,
-          id: window.crypto.randomUUID(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-        })
-      }
-      this.updateFileMeta()
+		deleteFile(fileId: string): void {
+			this.attachedFiles = [...this.attachedFiles].filter(
+				(file) => file.id !== fileId,
+			);
+			this.updateFileMeta();
+		},
 
-      this.$refs.createSecretFiles.value = ''
-    },
+		handlePasteFile(file: File): void {
+			this.attachedFiles.push({
+				fileObj: file,
+				id: window.crypto.randomUUID(),
+				name: file.name,
+				size: file.size,
+				type: file.type,
+			});
+			this.updateFileMeta();
+		},
 
-    isAcceptedBy(fileMeta: any, accept: string): boolean {
-      if (/^(?:[a-z]+|\*)\/(?:[a-zA-Z0-9.+_-]+|\*)$/.test(accept)) {
-        // That's likely supposed to be a mime-type
-        return RegExp(`^${accept.replaceAll('*', '.*')}$`).test(fileMeta.type)
-      } else if (/^\.[a-z.]+$/.test(accept)) {
-        // That should be a file extension
-        return fileMeta.name.endsWith(accept)
-      }
+		handleSelectFiles(): void {
+			for (const file of this.$refs.createSecretFiles.files) {
+				this.attachedFiles.push({
+					fileObj: file,
+					id: window.crypto.randomUUID(),
+					name: file.name,
+					size: file.size,
+					type: file.type,
+				});
+			}
+			this.updateFileMeta();
 
-      // What exactly is it then? At least it can't accept anything.
-      return false
-    },
+			this.$refs.createSecretFiles.value = "";
+		},
 
-    updateFileMeta(): void {
-      let cumSize = 0
-      for (const f of this.attachedFiles) {
-        cumSize += f.size
-      }
+		isAcceptedBy(fileMeta: any, accept: string): boolean {
+			if (
+				Array.isArray((this.customize as any).resolvedAcceptedExtensions) &&
+				(this.customize as any).resolvedAcceptedExtensions.length > 0
+			) {
+				const fileNameLower = (fileMeta.name || "").toLowerCase();
+				return (this.customize as any).resolvedAcceptedExtensions.some(
+					(ext: string) => fileNameLower.endsWith(ext.toLowerCase()),
+				);
+			}
 
-      this.fileSize = cumSize
-      this.selectedFileMeta = this.attachedFiles.map(file => ({
-        name: file.name,
-        type: file.type,
-      }))
-    },
-  },
+			const raw = accept.trim().toLowerCase();
+			if (!raw) return true;
 
-  name: 'AppCreate',
-})
+			let ext = raw.replace(/^\*/, "").trim();
+			if (!ext.startsWith(".")) ext = "." + ext;
+			return (fileMeta.name || "").toLowerCase().endsWith(ext);
+		},
+
+		updateFileMeta(): void {
+			let cumSize = 0;
+			for (const f of this.attachedFiles) {
+				cumSize += f.size;
+			}
+
+			this.fileSize = cumSize;
+			this.selectedFileMeta = this.attachedFiles.map((file) => ({
+				name: file.name,
+				type: file.type,
+			}));
+		},
+	},
+
+	name: "AppCreate",
+});
 </script>

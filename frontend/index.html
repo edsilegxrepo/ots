@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    {{ if .Customize.IsSearchIndexDisabled }}
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    {{ end }}
 
     {{ range (list "fa-solid-900.woff2" "fa-brands-400.woff2") }}
     <link
@@ -51,8 +54,8 @@
       // Template variable from Golang process
       window.maxSecretExpire = {{ .MaxSecretExpiry }}
       window.version = "{{ .Version }}"
-      window.OTSCustomize = {{ .Customize | mustToJson }}
-      window.useFormalLanguage = {{ .Customize.UseFormalLanguage | mustToJson }}
+      window.OTSCustomize = .Customize | mustToJson 
+      window.useFormalLanguage = .Customize.UseFormalLanguage | mustToJson 
     </script>
   </head>
   <body>

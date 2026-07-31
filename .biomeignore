@@ -1,0 +1,4 @@
+# Ignore server-side Go templates with Go text/template or html/template interpolation tags
+frontend/index.html
+src/langs/langs.tpl.js
+*.tpl.js

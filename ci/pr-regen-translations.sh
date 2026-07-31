@@ -8,25 +8,25 @@ files=(
 translation_branch=upd-translate
 
 function log() {
-  echo "$@" >&2
+  echo "$*" >&2
 }
 
 PR_REMOTE_URL=${1:-}
 [[ -n $PR_REMOTE_URL ]] || {
-  log "Usage: $(basename $0) <github branch URL i.e. https://github.com/Luzifer/ots/tree/translate-de>"
+  log "Usage: $(basename "$0") <github branch URL i.e. https://github.com/Luzifer/ots/tree/translate-de>"
   exit 1
 }
 
-remote="$(cut -d '/' -f 1-5 <<<"${PR_REMOTE_URL}").git"
-branch=$(cut -d '/' -f 7 <<<"${PR_REMOTE_URL}")
+remote="$(cut -d '/' -f 1-5 <<< "${PR_REMOTE_URL}").git"
+branch=$(cut -d '/' -f 7 <<< "${PR_REMOTE_URL}")
 
-git diff --exit-code >/dev/null || {
+git diff --exit-code > /dev/null || {
   log "FATAL: Local changes detected, stopping now."
   exit 1
 }
 
 switch_back_branch=$(git branch --show-current)
-trap "git switch ${switch_back_branch}" EXIT
+trap 'git switch "${switch_back_branch}"' EXIT
 
 log "Updating branch '${branch}' of remote '${remote}'..."
 
@@ -45,7 +45,7 @@ git switch ${translation_branch}
 log "+ Updating translations..."
 make translate
 
-if git diff --exit-code "${files[@]}" >/dev/null; then
+if git diff --exit-code "${files[@]}" > /dev/null; then
   log "No changed introduced, stopping now."
 fi
 
@@ -57,9 +57,9 @@ log "+ Please review these changes:"
 git show
 
 log "[Enter] to continue, [Ctrl+C] to cancel..."
-read
+read -r
 
 log "+ Updating remote branch..."
-git push ${remote} ${translation_branch}:${branch}
+git push "${remote}" "${translation_branch}:${branch}"
 
 log "Updated remote PR, switching back to previous branch..."

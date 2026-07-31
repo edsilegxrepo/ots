@@ -36,14 +36,15 @@ function go_package() {
 
 function go_package_all() {
   for oa in "${osarch[@]}"; do
-    local os=$(cut -d / -f 1 <<<"${oa}")
-    local arch=$(cut -d / -f 2 <<<"${oa}")
+    local os arch
+    os=$(cut -d / -f 1 <<< "${oa}")
+    arch=$(cut -d / -f 2 <<< "${oa}")
     (go_package "${os}" "${arch}" "${1}" "${2}")
   done
 }
 
 function log() {
-  echo "[$(date +%H:%M:%S)] $@" >&2
+  echo "[$(date +%H:%M:%S)] $*" >&2
 }
 
 root=$(pwd)
@@ -63,4 +64,4 @@ log "Building OTS-CLI..."
 go_package_all "ots-cli" "./cmd/ots-cli"
 
 log "Generating SHA256SUMS file..."
-(cd "${builddir}" && sha256sum * | tee SHA256SUMS)
+(cd "${builddir}" && sha256sum ./* | tee SHA256SUMS)

@@ -1,5 +1,17 @@
 // Package customization contains the structure for the customization
-// file to configure the OTS web- and command-line interface
+// file to configure the OTS web- and command-line interface.
+//
+// Objectives:
+// - Manages loading, validation, and JSON serialization of custom operator configuration files (customize.yaml).
+// - Sets sensible production defaults for secret sizes, rate limits, search engine privacy (robots.txt), and UI settings.
+// - Resolves group alias tokens (@images, @office, @archives) into normalized extension lists for pre-flight attachment checks.
+//
+// Core Components:
+// - Customize: Central configuration struct containing UI settings, file attachment rules, rate limits, and privacy toggles.
+// - Load: Reads and unmarshals YAML configuration files from the filesystem.
+// - ApplyFixes: Applies default values and resolves group aliases via ExpandAcceptedFileTypes.
+// - IsSearchIndexDisabled: Evaluates privacy settings to control search engine indexing (Issue #221).
+// - ToJSON: Template helper serializing customization settings for embedded web assets and API endpoints.
 package customization
 
 import (
@@ -26,21 +38,27 @@ type (
 		AppIcon              string `json:"appIcon,omitempty" yaml:"appIcon"`
 		AppIconDark          string `json:"appIconDark,omitempty" yaml:"appIconDark"`
 		AppTitle             string `json:"appTitle,omitempty" yaml:"appTitle"`
+		CustomBannerHTML     string `json:"customBannerHTML,omitempty" yaml:"customBannerHTML"`
 		DisableAppTitle      bool   `json:"disableAppTitle,omitempty" yaml:"disableAppTitle"`
+		DisableDefaultExpiry bool   `json:"disableDefaultExpiry,omitempty" yaml:"disableDefaultExpiry"`
 		DisablePoweredBy     bool   `json:"disablePoweredBy,omitempty" yaml:"disablePoweredBy"`
 		DisableQRSupport     bool   `json:"disableQRSupport,omitempty" yaml:"disableQRSupport"`
+		DisableSearchIndex   *bool  `json:"disableSearchIndex,omitempty" yaml:"disableSearchIndex"`
 		DisableThemeSwitcher bool   `json:"disableThemeSwitcher,omitempty" yaml:"disableThemeSwitcher"`
 
 		DisableExpiryOverride bool    `json:"disableExpiryOverride,omitempty" yaml:"disableExpiryOverride"`
 		ExpiryChoices         []int64 `json:"expiryChoices,omitempty" yaml:"expiryChoices"`
 
-		AcceptedFileTypes      string `json:"acceptedFileTypes" yaml:"acceptedFileTypes"`
-		DisableFileAttachment  bool   `json:"disableFileAttachment" yaml:"disableFileAttachment"`
-		MaxAttachmentSizeTotal int64  `json:"maxAttachmentSizeTotal" yaml:"maxAttachmentSizeTotal"`
+		AcceptedFileTypes          string   `json:"acceptedFileTypes" yaml:"acceptedFileTypes"`
+		ResolvedAcceptedExtensions []string `json:"resolvedAcceptedExtensions,omitempty" yaml:"-"`
+		DisableFileAttachment      bool     `json:"disableFileAttachment" yaml:"disableFileAttachment"`
+		MaxAttachmentSizeTotal     int64    `json:"maxAttachmentSizeTotal" yaml:"maxAttachmentSizeTotal"`
 
+		FileGroupsPath        string   `json:"-" yaml:"fileGroupsPath"`
 		MaxSecretSize         int64    `json:"-" yaml:"maxSecretSize"`
 		MetricsAllowedSubnets []string `json:"-" yaml:"metricsAllowedSubnets"`
 		OverlayFSPath         string   `json:"-" yaml:"overlayFSPath"`
+		RateLimitCreate       int      `json:"-" yaml:"rateLimitCreate"`
 		UseFormalLanguage     bool     `json:"-" yaml:"useFormalLanguage"`
 
 		FooterLinks []FooterLink `json:"footerLinks,omitempty" yaml:"footerLinks"`
@@ -58,7 +76,7 @@ type (
 func Load(filename string) (cust Customize, err error) {
 	if filename == "" {
 		// None given, take a shortcut
-		cust.applyFixes()
+		cust.ApplyFixes()
 		return cust, nil
 	}
 
@@ -80,7 +98,7 @@ func Load(filename string) (cust Customize, err error) {
 		return cust, fmt.Errorf("decoding customize file: %w", err)
 	}
 
-	cust.applyFixes()
+	cust.ApplyFixes()
 
 	return cust, nil
 }
@@ -96,7 +114,15 @@ func (c Customize) ToJSON() (string, error) {
 	return string(j), nil
 }
 
-func (c *Customize) applyFixes() {
+// IsSearchIndexDisabled returns true if search index is disabled (defaults to true for privacy).
+func (c Customize) IsSearchIndexDisabled() bool {
+	if c.DisableSearchIndex == nil {
+		return true
+	}
+	return *c.DisableSearchIndex
+}
+
+func (c *Customize) ApplyFixes() {
 	if len(c.AppTitle) == 0 {
 		c.AppTitle = "OTS - One Time Secrets"
 	}
@@ -104,4 +130,22 @@ func (c *Customize) applyFixes() {
 	if c.MaxSecretSize == 0 {
 		c.MaxSecretSize = defaultMaxSecretSize
 	}
+
+	if c.RateLimitCreate == 0 {
+		c.RateLimitCreate = 30
+	}
+
+	if c.DisableSearchIndex == nil {
+		defaultDisable := true
+		c.DisableSearchIndex = &defaultDisable
+	}
+
+	var customGroups map[string][]string
+	if c.FileGroupsPath != "" {
+		var err error
+		if customGroups, err = LoadCustomFileGroups(c.FileGroupsPath); err != nil {
+			logrus.WithError(err).Warn("failed to load custom file groups file")
+		}
+	}
+	c.ResolvedAcceptedExtensions = ExpandAcceptedFileTypes(c.AcceptedFileTypes, customGroups)
 }

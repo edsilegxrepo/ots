@@ -1,5 +1,20 @@
 // Package client implements a client library for OTS supporting the
-// OTSMeta content format for file upload support
+// OTSMeta content format for file upload support.
+//
+// Objectives:
+// - Implements zero-knowledge client-side encryption and decryption of secrets and file attachments.
+// - Provides a Go SDK for creating, fetching, and dual-channel splitting of OTS secret URLs.
+// - Ensures cross-interoperability between the Go CLI, Go SDK, and Vue SPA browser frontend.
+//
+// Core Components:
+// - Create: Generates a cryptographically secure key, encrypts secret & attachments via PBKDF2/AES, and posts to server.
+// - Fetch: Retrieves encrypted secret blob from server and decrypts payload using URL fragment key.
+// - FetchWithKey: Supports dual-channel decryption when secret URL and key are transmitted separately (Issue #208).
+// - SplitSecretURL: Utility function splitting unified URL into base URL (#secret_id) and decryption key.
+//
+// Data Flow:
+// 1. Secret Payload -> PBKDF2/OpenSSL AES Encryption -> JSON Payload -> POST /api/create -> Server returns Secret ID.
+// 2. Secret URL -> GET /api/get/{secret_id} -> Server returns Encrypted Blob -> Client Decrypts Payload via Key -> Secret Restored.
 package client
 
 import (
@@ -150,6 +165,12 @@ func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, 
 // The object returned will always be an OTSMeta object even in case
 // the secret is a plain secret without attachments.
 func Fetch(secretURL string) (s Secret, err error) {
+	return FetchWithKey(secretURL, "")
+}
+
+// FetchWithKey retrieves a secret when the secret URL and decryption key
+// are split for separate channel transmission (Dual-Channel Delivery).
+func FetchWithKey(secretURL, decryptionKey string) (s Secret, err error) {
 	u, err := url.Parse(secretURL)
 	if err != nil {
 		return s, fmt.Errorf("parsing secret URL: %w", err)
@@ -160,6 +181,15 @@ func Fetch(secretURL string) (s Secret, err error) {
 		return s, fmt.Errorf("unescaping fragment: %w", err)
 	}
 	fragmentParts := strings.SplitN(fragment, "|", 2)
+
+	key := decryptionKey
+	if len(fragmentParts) > 1 && fragmentParts[1] != "" {
+		key = fragmentParts[1]
+	}
+
+	if key == "" {
+		return s, fmt.Errorf("decryption key missing from URL fragment and parameter")
+	}
 
 	fetchURL := u.JoinPath(strings.Join([]string{".", "api", "get", fragmentParts[0]}, "/")).String()
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
@@ -189,11 +219,33 @@ func Fetch(secretURL string) (s Secret, err error) {
 		return s, fmt.Errorf("decoding response body: %w", err)
 	}
 
-	if err = s.read([]byte(payload.Secret), fragmentParts[1]); err != nil {
+	if err = s.read([]byte(payload.Secret), key); err != nil {
 		return s, fmt.Errorf("decoding secret: %w", err)
 	}
 
 	return s, nil
+}
+
+// SplitSecretURL splits a unified secret URL into a base URL (Channel A)
+// and a separate decryption key (Channel B) for dual-channel transmission.
+func SplitSecretURL(secretURL string) (baseURL, decryptionKey string, err error) {
+	u, err := url.Parse(secretURL)
+	if err != nil {
+		return "", "", fmt.Errorf("parsing secret URL: %w", err)
+	}
+
+	fragment, err := url.QueryUnescape(u.Fragment)
+	if err != nil {
+		return "", "", fmt.Errorf("unescaping fragment: %w", err)
+	}
+
+	parts := strings.SplitN(fragment, "|", 2)
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("invalid secret URL format: missing decryption key fragment")
+	}
+
+	u.Fragment = parts[0]
+	return u.String(), parts[1], nil
 }
 
 func genPass() (string, error) {

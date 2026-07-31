@@ -1,0 +1,3 @@
+# Ignore Go template files with .js extensions from JS linter parsing
+src/langs/*.tpl.js
+*.tpl.js

@@ -3,8 +3,8 @@ package main
 import (
 	"crypto/sha512"
 	"encoding/base64"
+	"html/template"
 	"sync"
-	"text/template"
 
 	"github.com/Luzifer/ots/pkg/tplfunc"
 )

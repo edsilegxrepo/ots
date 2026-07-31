@@ -4,10 +4,10 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"html/template"
 	"os"
 	"sort"
 	"strings"
-	"text/template"
 )
 
 //go:embed issue.tpl.md

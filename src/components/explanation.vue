@@ -1,5 +1,7 @@
 <template>
   <div class="card border-primary-subtle mb-3">
+    <!-- Safe: Trusted internal translation string from i18n.yaml -->
+    <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
     <div
       class="card-header bg-primary-subtle"
       v-html="$t('title-explanation')"
@@ -18,9 +20,9 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  name: 'AppExplanation',
-})
+	name: "AppExplanation",
+});
 </script>

@@ -39,7 +39,9 @@
             <a
               class="nav-link"
               href="#"
-              @click.prevent="$emit('navigate', '/explanation')"
+              data-bs-toggle="modal"
+              data-bs-target="#explanationModal"
+              @click.prevent
             >
               <i class="fas fa-circle-info" /> {{ $t('btn-show-explanation') }}
             </a>
@@ -109,61 +111,63 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
 
 export default defineComponent({
-  computed: {
-    appIcon(): string {
-      // Use specified icon or fall back to null
-      const appIcon = this.$parent.customize.appIcon || null
-      // Use specified icon or fall back to light-mode appIcon (which might be null)
-      const darkIcon = this.$parent.customize.appIconDark || appIcon
+	computed: {
+		appIcon(): string {
+			// Use specified icon or fall back to null
+			const appIcon = this.$parent.customize.appIcon || null;
+			// Use specified icon or fall back to light-mode appIcon (which might be null)
+			const darkIcon = this.$parent.customize.appIconDark || appIcon;
 
-      return (this.theme === 'auto' ? window.getTheme() : this.theme) === 'dark' ? darkIcon : appIcon
-    },
+			return (this.theme === "auto" ? window.getTheme() : this.theme) === "dark"
+				? darkIcon
+				: appIcon;
+		},
 
-    customize(): any {
-      return this.$parent.customize || {}
-    },
-  },
+		customize(): any {
+			return this.$parent.customize || {};
+		},
+	},
 
-  data() {
-    return {
-      intTheme: '',
-    }
-  },
+	data() {
+		return {
+			intTheme: "",
+		};
+	},
 
-  emits: ['navigate', 'update:theme'],
+	emits: ["navigate", "update:theme"],
 
-  mounted(): void {
-    this.intTheme = this.theme
-  },
+	mounted(): void {
+		this.intTheme = this.theme;
+	},
 
-  name: 'AppNavbar',
+	name: "AppNavbar",
 
-  props: {
-    theme: {
-      required: true,
-      type: String,
-    },
-  },
+	props: {
+		theme: {
+			required: true,
+			type: String,
+		},
+	},
 
-  watch: {
-    intTheme(to: string, from: string): void {
-      if (to === from) {
-        return
-      }
+	watch: {
+		intTheme(to: string, from: string): void {
+			if (to === from) {
+				return;
+			}
 
-      this.$emit('update:theme', to)
-    },
+			this.$emit("update:theme", to);
+		},
 
-    theme(to: string, from: string): void {
-      if (to === from) {
-        return
-      }
+		theme(to: string, from: string): void {
+			if (to === from) {
+				return;
+			}
 
-      this.intTheme = to
-    },
-  },
-})
+			this.intTheme = to;
+		},
+	},
+});
 </script>

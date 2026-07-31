@@ -99,3 +99,35 @@ func TestSanityCheck(t *testing.T) {
 	err = SanityCheck(u, s)
 	require.NoError(t, err)
 }
+
+func TestLargeAttachmentSanityCheck(t *testing.T) {
+	m := custMockClient{&customization.Customize{
+		AcceptedFileTypes:      "@images, @archives, .iso",
+		DisableFileAttachment:  false,
+		MaxAttachmentSizeTotal: 512 * 1024 * 1024, // 512MB limit
+	}}
+	u := "http://localhost/"
+
+	HTTPClient = &m
+	defer func() { HTTPClient = http.DefaultClient }()
+
+	// 128MB attachment should be allowed under 512MB cap
+	s1 := Secret{
+		Secret: "large_attachment",
+		Attachments: []SecretAttachment{
+			{Name: "archive.7z", Type: "application/x-7z-compressed", Content: make([]byte, 128*1024*1024)},
+		},
+	}
+	err := SanityCheck(u, s1)
+	require.NoError(t, err)
+
+	// 600MB attachment should be rejected when exceeding 512MB cap
+	s2 := Secret{
+		Secret: "too_large_attachment",
+		Attachments: []SecretAttachment{
+			{Name: "disk_image.iso", Type: "application/x-iso9660-image", Content: make([]byte, 600*1024*1024)},
+		},
+	}
+	err = SanityCheck(u, s2)
+	require.ErrorIs(t, err, ErrAttachmentsTooLarge)
+}

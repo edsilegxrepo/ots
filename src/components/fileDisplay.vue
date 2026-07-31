@@ -31,63 +31,66 @@
 </template>
 
 <script lang="ts">
-import { bytesToHuman } from '../helpers'
-import { defineComponent } from 'vue'
+import { defineComponent } from "vue";
+import { bytesToHuman } from "../helpers";
 
 export default defineComponent({
-  data() {
-    return {
-      hasDownloaded: {},
-    }
-  },
+	data() {
+		return {
+			hasDownloaded: {},
+		};
+	},
 
-  emits: ['fileClicked'],
+	emits: ["fileClicked"],
 
-  methods: {
-    bytesToHuman,
+	methods: {
+		bytesToHuman,
 
-    fasFileType(type: string): string {
-      return [
-        'fas',
-        'fa-fw',
-        'me-2',
-        ...[
-          { icon: ['fa-file-pdf'], match: /application\/pdf/ },
-          { icon: ['fa-file-audio'], match: /^audio\// },
-          { icon: ['fa-file-image'], match: /^image\// },
-          { icon: ['fa-file-lines'], match: /^text\// },
-          { icon: ['fa-file-video'], match: /^video\// },
-          { icon: ['fa-file-zipper'], match: /^application\/(gzip|x-tar|zip)$/ },
-          { icon: ['fa-file-circle-question'], match: /.*/ },
-        ].filter(el => el.match.test(type))[0].icon,
-      ].join(' ')
-    },
+		fasFileType(type: string): string {
+			return [
+				"fas",
+				"fa-fw",
+				"me-2",
+				...[
+					{ icon: ["fa-file-pdf"], match: /application\/pdf/ },
+					{ icon: ["fa-file-audio"], match: /^audio\// },
+					{ icon: ["fa-file-image"], match: /^image\// },
+					{ icon: ["fa-file-lines"], match: /^text\// },
+					{ icon: ["fa-file-video"], match: /^video\// },
+					{
+						icon: ["fa-file-zipper"],
+						match: /^application\/(gzip|x-tar|zip)$/,
+					},
+					{ icon: ["fa-file-circle-question"], match: /.*/ },
+				].filter((el) => el.match.test(type))[0].icon,
+			].join(" ");
+		},
 
-    handleClick(file: any): void {
-      this.hasDownloaded[file.id] = true
-      this.$emit('fileClicked', file.id)
-    },
-  },
+		handleClick(file: any): void {
+			this.hasDownloaded[file.id] = true;
+			this.$emit("fileClicked", file.id);
+		},
+	},
 
-  name: 'AppFileDisplay',
+	name: "AppFileDisplay",
 
-  props: {
-    canDelete: {
-      default: false,
-      required: false,
-      type: Boolean,
-    },
+	props: {
+		canDelete: {
+			default: false,
+			required: false,
+			type: Boolean,
+		},
 
-    files: {
-      required: true,
-      type: Array<any>,
-    },
+		files: {
+			required: true,
+			type: Array<any>,
+		},
 
-    trackDownload: {
-      default: true,
-      required: false,
-      type: Boolean,
-    },
-  },
-})
+		trackDownload: {
+			default: true,
+			required: false,
+			type: Boolean,
+		},
+	},
+});
 </script>

@@ -1,6 +1,8 @@
 package client
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -34,4 +36,94 @@ func TestIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, s, apiSecret)
+}
+
+func TestCreateErrorHandlingAndExpireQuery(t *testing.T) {
+	// Test Create with custom expireIn parameter
+	s := Secret{Secret: "test_secret"}
+
+	var queryExpire string
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queryExpire = r.URL.Query().Get("expire")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"success":true,"secret_id":"12345"}`))
+	}))
+	defer testServer.Close()
+
+	secretURL, _, err := Create(testServer.URL, s, 3600*time.Second)
+	require.NoError(t, err)
+	assert.Equal(t, "3600", queryExpire)
+	assert.Contains(t, secretURL, "#12345%7C")
+
+	// Test server returning HTTP 400 Bad Request
+	errServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"bad request"}`))
+	}))
+	defer errServer.Close()
+
+	_, _, err = Create(errServer.URL, s, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected HTTP status 400")
+
+	// Test server returning invalid JSON
+	invalidJSONServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`not_json`))
+	}))
+	defer invalidJSONServer.Close()
+
+	_, _, err = Create(invalidJSONServer.URL, s, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "decoding response")
+}
+
+func TestFetchErrorHandling(t *testing.T) {
+	// Test Fetch returning HTTP 404 Not Found
+	errServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer errServer.Close()
+
+	_, err := Fetch(errServer.URL + "/#dummyid|dummypass")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
+
+	// Test Fetch returning invalid JSON
+	invalidJSONServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`invalid_json`))
+	}))
+	defer invalidJSONServer.Close()
+
+	_, err = Fetch(invalidJSONServer.URL + "/#dummyid|dummypass")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "decoding response body")
+}
+
+func TestLoadSettingsErrorHandling(t *testing.T) {
+	// Test loadSettings with invalid URL
+	_, err := loadSettings(":%invalid_url")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing instance URL")
+
+	// Test loadSettings returning 404 Not Found
+	notFoundServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer notFoundServer.Close()
+
+	_, err = loadSettings(notFoundServer.URL)
+	assert.ErrorIs(t, err, errSettingsNotFound)
+
+	// Test loadSettings returning invalid JSON
+	invalidServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`invalid_json`))
+	}))
+	defer invalidServer.Close()
+
+	_, err = loadSettings(invalidServer.URL)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "decoding response")
 }
