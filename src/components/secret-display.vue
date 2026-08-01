@@ -128,8 +128,12 @@ export default defineComponent({
 	methods: {
 		async computeSHA256(buffer: ArrayBuffer): Promise<string> {
 			const hashBuffer = await window.crypto.subtle.digest("SHA-256", buffer);
-			const hashArray = Array.from(new Uint8Array(hashBuffer));
-			return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+			const bytes = new Uint8Array(hashBuffer);
+			let hex = "";
+			for (let i = 0; i < bytes.length; i++) {
+				hex += bytes[i].toString(16).padStart(2, "0");
+			}
+			return hex;
 		},
 
 		async downloadBundle(): Promise<void> {
@@ -138,43 +142,65 @@ export default defineComponent({
 
 			try {
 				const zip = new JSZip();
-				const shaLines: string[] = [];
+				const itemsToHash: { name: string; bytes: Uint8Array }[] = [];
 
-				// 1. Add secret text if present
+				// 1. Prepare secret text
 				if (this.secret) {
-					const encoder = new TextEncoder();
-					const secretBytes = encoder.encode(this.secret);
-					const secretHash = await this.computeSHA256(secretBytes.buffer);
-					shaLines.push(`${secretHash}  secret.txt`);
-					zip.file("secret.txt", secretBytes);
+					itemsToHash.push({
+						name: "secret.txt",
+						bytes: new TextEncoder().encode(this.secret),
+					});
 				}
 
-				// 2. Add attached files with zero-copy STORE mode
+				// 2. Prepare attached files
 				for (const f of this.files) {
 					let buf = f.buffer;
 					if (!buf && f.url) {
 						buf = await fetch(f.url).then((res) => res.arrayBuffer());
 					}
 					if (buf) {
-						const fileHash = await this.computeSHA256(buf);
-						shaLines.push(`${fileHash}  ${f.name}`);
-						zip.file(f.name, buf, { compression: "STORE" });
+						itemsToHash.push({
+							name: f.name,
+							bytes: new Uint8Array(buf),
+						});
 					}
 				}
 
-				// 3. Add SHA256SUMS manifest file
-				const shaContent = shaLines.join("\n") + "\n";
-				zip.file("SHA256SUMS", shaContent);
+				// 3. Compute hardware SHA-256 hashes IN PARALLEL via Web Crypto API
+				const hashResults = await Promise.all(
+					itemsToHash.map(async (item) => {
+						const hash = await this.computeSHA256(item.bytes.buffer);
+						return `${hash}  ${item.name}`;
+					}),
+				);
 
-				// 4. Generate ZIP blob & trigger browser download
+				// 4. Add items to ZIP container with zero-copy STORE compression
+				itemsToHash.forEach((item) => {
+					zip.file(item.name, item.bytes, { compression: "STORE" });
+				});
+
+				// 5. Add SHA256SUMS manifest file
+				zip.file("SHA256SUMS", hashResults.join("\n") + "\n");
+
+				// 6. Asynchronously generate ZIP Blob
 				const zipBlob = await zip.generateAsync({ type: "blob" });
+
+				// Yield to event loop to allow Chrome disk stream to flush instantly
+				await new Promise((resolve) => setTimeout(resolve, 0));
+
+				const blobUrl = window.URL.createObjectURL(zipBlob);
 				const link = document.createElement("a");
 				const prefix = this.secretId ? this.secretId.substring(0, 8) : "bundle";
-				link.href = window.URL.createObjectURL(zipBlob);
+				link.href = blobUrl;
 				link.download = `secret-bundle-${prefix}.zip`;
 				document.body.appendChild(link);
 				link.click();
 				document.body.removeChild(link);
+
+				// Revoke blob object URL after 3s to finalize browser download bar
+				setTimeout(() => {
+					window.URL.revokeObjectURL(blobUrl);
+				}, 3000);
 			} catch (err) {
 				console.error("Failed to generate zip bundle:", err);
 			} finally {

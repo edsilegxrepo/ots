@@ -70,6 +70,7 @@ kill_running_ots_processes() {
   if command -v powershell &>/dev/null; then
     powershell -Command "Get-Process -Name ots,ots_windows_amd64,ots_linux_amd64 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
   fi
+  sleep 1
 }
 
 # -----------------------------------------------------------------------------
@@ -187,7 +188,7 @@ fi
 if [ "${BUILD_ENGLISH_ONLY}" = "true" ]; then
   echo "==> Purging non-English languages (--english-only mode enabled)..."
   cp i18n.yaml i18n.yaml.bak
-  trap 'mv -f i18n.yaml.bak i18n.yaml 2>/dev/null || true' EXIT
+  trap 'mv -f i18n.yaml.bak i18n.yaml 2>/dev/null || true' EXIT INT TERM HUP
 
   echo "    Purging translations block using sed..."
   sed -i -n '/^translations:/q;p' i18n.yaml
@@ -204,11 +205,11 @@ if [ -d "ci/translate" ]; then
   rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2>/dev/null || true
 fi
 
-# Sub-Step 6.3: Restore Original i18n.yaml Configuration
+# Sub-Step 6.3: Immediately Restore Original i18n.yaml Configuration
 if [ "${BUILD_ENGLISH_ONLY}" = "true" ]; then
   echo "==> Restoring original i18n.yaml file..."
   mv -f i18n.yaml.bak i18n.yaml 2>/dev/null || true
-  trap - EXIT
+  trap - EXIT INT TERM HUP
 fi
 
 # -----------------------------------------------------------------------------
@@ -488,7 +489,7 @@ if [ "${AUTO_START}" = "true" ]; then
     EXEC_PATH="$(cygpath -m "${BIN_DIR}/ots_windows_amd64.exe")"
     CFG_PATH="$(cygpath -m "${CUSTOM_CFG}")"
     WIN_LOG_PATH="$(cygpath -m "${LOG_FILE}")"
-    powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen 127.0.0.1:3000 --customize \"${CFG_PATH}\" --log-file-path \"${WIN_LOG_PATH}\"' -WindowStyle Hidden"
+    powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
   # Sub-Step 12.3: Launch Detached Linux Background Process via nohup
   elif [ -f "${BIN_DIR}/ots_linux_amd64" ]; then
     nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &

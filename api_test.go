@@ -563,3 +563,28 @@ func TestEnterpriseMessageTemplatesRendering(t *testing.T) {
 	assert.NotContains(t, dualKeyTpl, shortURL)
 	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, dualKeyTpl, "dual key template must contain zero emojis")
 }
+
+func TestSecretBundlePayloadAssembly(t *testing.T) {
+	// Verify assembly of multi-file secret bundles for client-side JSZip packaging
+	sec := client.Secret{
+		Secret: "Confidential System Secret Payload",
+		Attachments: []client.SecretAttachment{
+			{
+				Name:    "config.json",
+				Type:    "application/json",
+				Content: []byte(`{"db_host":"127.0.0.1","db_port":5432}`),
+			},
+			{
+				Name:    "setup.sh",
+				Type:    "text/x-shellscript",
+				Content: []byte("#!/bin/bash\necho Setup completed\n"),
+			},
+		},
+	}
+
+	assert.Equal(t, "Confidential System Secret Payload", sec.Secret)
+	require.Len(t, sec.Attachments, 2)
+	assert.Equal(t, "config.json", sec.Attachments[0].Name)
+	assert.Equal(t, "setup.sh", sec.Attachments[1].Name)
+	assert.Contains(t, string(sec.Attachments[0].Content), "127.0.0.1")
+}
