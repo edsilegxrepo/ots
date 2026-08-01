@@ -15,7 +15,11 @@ import (
 	"time"
 )
 
-const numRateLimiterShards = 32
+const (
+	numRateLimiterShards        = 32
+	fnvOffsetBasis       uint32 = 2166136261
+	fnvPrime             uint32 = 16777619
+)
 
 type ipRateLimiterShard struct {
 	mu       sync.Mutex
@@ -37,7 +41,7 @@ func newIPRateLimiter(limit int, window time.Duration) *ipRateLimiter {
 		window: window,
 	}
 
-	for i := 0; i < numRateLimiterShards; i++ {
+	for i := range numRateLimiterShards {
 		limiter.shards[i] = &ipRateLimiterShard{
 			requests: make(map[string][]time.Time),
 		}
@@ -50,15 +54,6 @@ func newIPRateLimiter(limit int, window time.Duration) *ipRateLimiter {
 	}()
 
 	return limiter
-}
-
-func (l *ipRateLimiter) getShard(ip string) *ipRateLimiterShard {
-	var h uint32 = 2166136261
-	for i := 0; i < len(ip); i++ {
-		h ^= uint32(ip[i])
-		h *= 16777619
-	}
-	return l.shards[h%numRateLimiterShards]
 }
 
 // Allow checks whether the specified IP has exceeded the allowed request limit in the current sliding window.
@@ -113,6 +108,15 @@ func (l *ipRateLimiter) cleanup() {
 		}
 		shard.mu.Unlock()
 	}
+}
+
+func (l *ipRateLimiter) getShard(ip string) *ipRateLimiterShard {
+	h := fnvOffsetBasis
+	for i := 0; i < len(ip); i++ {
+		h ^= uint32(ip[i])
+		h *= fnvPrime
+	}
+	return l.shards[h%numRateLimiterShards]
 }
 
 // getClientIP extracts the client's real IP address from proxy headers if RemoteAddr originates from trusted proxies.

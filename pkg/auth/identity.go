@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"fmt"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -96,7 +97,7 @@ func LoadIAMConfig(data []byte) (IAMConfig, error) {
 
 	var direct IAMConfig
 	if err := yaml.Unmarshal(data, &direct); err != nil {
-		return IAMConfig{}, err
+		return IAMConfig{}, fmt.Errorf("yaml unmarshal iam config: %w", err)
 	}
 
 	return direct, nil

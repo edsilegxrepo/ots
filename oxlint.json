@@ -1,0 +1,3 @@
+{
+  "ignorePatterns": ["src/langs/*.tpl.js", "*.tpl.js", "node_modules/**", "dist/**"]
+}

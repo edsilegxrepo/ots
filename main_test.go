@@ -236,14 +236,16 @@ func TestLogFilePathWriting(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := filepath.Join(tmpDir, "test_ots.log")
 
+	// #nosec G302 -- Test log file creation
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	require.NoError(t, err)
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	logrus.SetOutput(logFile)
 	logrus.SetFormatter(&logrus.JSONFormatter{TimestampFormat: time.RFC3339})
 	logrus.Info("written to file log")
 
+	//nolint:gosec // Test log file reading from temporary directory
 	content, err := os.ReadFile(logPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), `"msg":"written to file log"`)

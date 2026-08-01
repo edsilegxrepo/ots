@@ -1,6 +1,8 @@
+// Package auth implements authentication and authorization test suites.
 package auth
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
@@ -23,7 +25,7 @@ func TestForwardAuthAuthenticator(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Trusted Proxy Header Extraction", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.RemoteAddr = "127.0.0.1:54321"
 		req.Header.Set("Remote-User", "alice@company.com")
 		req.Header.Set("Remote-Email", "alice@company.com")
@@ -38,21 +40,21 @@ func TestForwardAuthAuthenticator(t *testing.T) {
 	})
 
 	t.Run("Untrusted Proxy Spoofing Rejection", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.RemoteAddr = "203.0.113.195:12345" // Untrusted IP
 		req.Header.Set("Remote-User", "hacker@evil.com")
 
 		identity, err := fa.Authenticate(req)
-		assert.ErrorIs(t, err, ErrUntrustedProxy)
+		require.ErrorIs(t, err, ErrUntrustedProxy)
 		assert.Nil(t, identity)
 	})
 
 	t.Run("Missing User Header Rejection", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.RemoteAddr = "127.0.0.1:54321"
 
 		identity, err := fa.Authenticate(req)
-		assert.ErrorIs(t, err, ErrMissingUser)
+		require.ErrorIs(t, err, ErrMissingUser)
 		assert.Nil(t, identity)
 	})
 }
@@ -81,7 +83,7 @@ func TestLocalArgon2idAuthenticator(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Valid HTTP Basic Credentials", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.SetBasicAuth("bob", "SuperSecret123!")
 
 		identity, err := la.AuthenticateBasic(req)
@@ -92,11 +94,11 @@ func TestLocalArgon2idAuthenticator(t *testing.T) {
 	})
 
 	t.Run("Invalid HTTP Basic Credentials", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.SetBasicAuth("bob", "WrongPass")
 
 		identity, err := la.AuthenticateBasic(req)
-		assert.ErrorIs(t, err, ErrInvalidCredentials)
+		require.ErrorIs(t, err, ErrInvalidCredentials)
 		assert.Nil(t, identity)
 	})
 }

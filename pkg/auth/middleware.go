@@ -7,11 +7,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type contextKey string
-
+// UserIdentityContextKey is the request context key used to retrieve authenticated UserIdentity.
 const UserIdentityContextKey = contextKey("user_identity")
 
+type contextKey string
+
 // AuthMiddleware wraps HTTP handlers to enforce ForwardAuth / Local Basic authentication and RBAC policies.
+//
+//nolint:revive // AuthMiddleware is explicit and descriptive for callers
 type AuthMiddleware struct {
 	config      IAMConfig
 	forwardAuth *ForwardAuthAuthenticator

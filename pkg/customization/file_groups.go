@@ -22,13 +22,13 @@ import (
 
 // DefaultFileGroups defines standard extension groups for easy administration.
 var DefaultFileGroups = map[string][]string{
-	"@archives":  {".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".iso", ".cab", ".zst"},
-	"@images":    {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff", ".heic"},
-	"@video":     {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv", ".m4v", ".3gp"},
-	"@audio":     {".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".opus"},
-	"@office":    {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
-	"@documents": {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
-	"@packages":  {".deb", ".rpm", ".apk", ".msi", ".pkg", ".appimage", ".dmg", ".flatpakref", ".snap", ".ipa"},
+	"@archives":       {".zip", ".7z", ".rar", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".iso", ".cab", ".zst"},
+	"@images":         {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff", ".heic"},
+	"@video":          {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv", ".m4v", ".3gp"},
+	"@audio":          {".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".opus"},
+	"@office":         {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
+	"@documents":      {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".txt", ".rtf", ".csv"},
+	"@packages":       {".deb", ".rpm", ".apk", ".msi", ".pkg", ".appimage", ".dmg", ".flatpakref", ".snap", ".ipa"},
 	"@binaries":       {".exe", ".bin", ".dll", ".so", ".dylib", ".elf", ".dat"},
 	"@code":           {".json", ".xml", ".yaml", ".yml", ".py", ".js", ".ts", ".go", ".sh", ".ps1", ".html", ".css", ".sql"},
 	"@security":       {".pem", ".crt", ".key", ".cer", ".pfx", ".asc", ".jks", ".p12", ".der", ".csr", ".crl"},

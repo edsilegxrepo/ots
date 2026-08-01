@@ -1,10 +1,10 @@
 // Package main - API Server & Live E2E Test Suite
 //
 // Test Strategy Explanation:
-// - Unit & Integration Isolation: Tests API handlers (handleCreate, handleRead, handleSettings) against in-memory storage.
-// - Boundary & Validation Testing: Exercises expiry overrides, malformed JSON, rate limits, and total instance storage caps.
-// - Live Server E2E Verification: Uses httptest.NewServer with real Gorilla Mux routing to test 10MB attachments,
-//   group-based extension filtering (@images, @office), and Issue #208 dual-channel URL splitting (FetchWithKey).
+//   - Unit & Integration Isolation: Tests API handlers (handleCreate, handleRead, handleSettings) against in-memory storage.
+//   - Boundary & Validation Testing: Exercises expiry overrides, malformed JSON, rate limits, and total instance storage caps.
+//   - Live Server E2E Verification: Uses httptest.NewServer with real Gorilla Mux routing to test 10MB attachments,
+//     group-based extension filtering (@images, @office), and Issue #208 dual-channel URL splitting (FetchWithKey).
 package main
 
 import (
@@ -290,7 +290,7 @@ func TestLiveOTSServerFullLifecycleE2E(t *testing.T) {
 
 	// 4. Verify one-time read & destroy on live server
 	_, err = client.Fetch(secretURL)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
 }
 
@@ -325,7 +325,7 @@ func TestLiveServerLargeAttachmentsE2E(t *testing.T) {
 	assert.Equal(t, "Secret with 10MB Large Attachment Payload", fetched.Secret)
 	require.Len(t, fetched.Attachments, 1)
 	assert.Equal(t, "large_dataset.bin", fetched.Attachments[0].Name)
-	assert.Equal(t, len(largePayload), len(fetched.Attachments[0].Content))
+	assert.Len(t, fetched.Attachments[0].Content, len(largePayload))
 	assert.Equal(t, largePayload[:100], fetched.Attachments[0].Content[:100])
 }
 
@@ -373,6 +373,7 @@ func TestLiveServerDualChannelSplitKeyE2E(t *testing.T) {
 	liveServer := httptest.NewServer(r)
 	defer liveServer.Close()
 
+	// #nosec G101 -- Test dummy credentials
 	secret := client.Secret{
 		Secret: "Top Secret Credentials for Dual-Channel Transmission",
 		Attachments: []client.SecretAttachment{
@@ -391,7 +392,7 @@ func TestLiveServerDualChannelSplitKeyE2E(t *testing.T) {
 
 	// Attempting to fetch base URL without decryption key fails
 	_, err = client.Fetch(baseURL)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Fetching base URL with separately transmitted decryption key succeeds
 	fetched, err := client.FetchWithKey(baseURL, decryptionKey)
@@ -402,7 +403,7 @@ func TestLiveServerDualChannelSplitKeyE2E(t *testing.T) {
 
 	// One-time read & destroy verification
 	_, err = client.FetchWithKey(baseURL, decryptionKey)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected HTTP status 404")
 }
 
@@ -419,7 +420,7 @@ func TestLiveServerConcurrencyAndAntiSpoofingE2E(t *testing.T) {
 	const workers = 20
 	errChan := make(chan error, workers)
 
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		go func(workerID int) {
 			sec := client.Secret{
 				Secret: fmt.Sprintf("Parallel secret payload from worker %d", workerID),
@@ -442,7 +443,7 @@ func TestLiveServerConcurrencyAndAntiSpoofingE2E(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < workers; i++ {
+	for range workers {
 		err := <-errChan
 		assert.NoError(t, err)
 	}
@@ -458,9 +459,11 @@ func TestLiveServerSanitizedErrorResponsesE2E(t *testing.T) {
 	defer liveServer.Close()
 
 	// Test 1: Fetching non-existent secret ID returns 404 with UUID tracking error ID
-	resp, err := http.Get(liveServer.URL + "/api/get/non-existent-uuid-12345")
+	req1, err := http.NewRequestWithContext(t.Context(), http.MethodGet, liveServer.URL+"/api/get/non-existent-uuid-12345", nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	resp, err := http.DefaultClient.Do(req1)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 
@@ -471,9 +474,12 @@ func TestLiveServerSanitizedErrorResponsesE2E(t *testing.T) {
 	assert.Len(t, errResp.Error, 36) // UUID v4 string length
 
 	// Test 2: Malformed JSON creation returns 400 Bad Request with UUID tracking error ID
-	resp2, err := http.Post(liveServer.URL+"/api/create", "application/json", strings.NewReader(`{invalid-json`))
+	req2, err := http.NewRequestWithContext(t.Context(), http.MethodPost, liveServer.URL+"/api/create", strings.NewReader(`{invalid-json`))
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	req2.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(req2)
+	require.NoError(t, err)
+	defer func() { _ = resp2.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
 
@@ -504,6 +510,7 @@ func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
 		Content: rawBytes,
 	}
 
+	// #nosec G101 -- Test dummy secret payload
 	sec := client.Secret{
 		Secret:      "RPM Package Description",
 		Attachments: []client.SecretAttachment{att},
@@ -521,14 +528,15 @@ func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
 	assert.Equal(t, "RPM Package Description", fetched.Secret)
 	require.Len(t, fetched.Attachments, 1)
 	assert.Equal(t, "scipy-1.11.3-3.rawhide.src.rpm", fetched.Attachments[0].Name)
-	assert.Equal(t, rawAttachmentSize, len(fetched.Attachments[0].Content))
+	assert.Len(t, fetched.Attachments[0].Content, rawAttachmentSize)
 
 	// 3. Verify one-time burn
 	_, err = client.Fetch(secretURL)
-	assert.Error(t, err, "second read must return 404 Not Found")
+	require.Error(t, err, "second read must return 404 Not Found")
 }
 
 func TestEnterpriseMessageTemplatesRendering(t *testing.T) {
+	// #nosec G101 -- Dummy test decryption key and secret ID
 	secretID := "57a87bbd-fc58-4716-aa36-511d027a40aa"
 	shortID := "57a87bbd"
 	key := "zAuhdWvm96ugn3JsgU0m"
@@ -640,7 +648,7 @@ func TestForwardAuthIntegrationE2E(t *testing.T) {
 	}))
 
 	t.Run("Authorized ForwardAuth Call", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.RemoteAddr = "127.0.0.1:4000"
 		req.Header.Set("Remote-User", "alice@company.com")
 		req.Header.Set("Remote-Groups", "DevOps,Engineering")
@@ -653,7 +661,7 @@ func TestForwardAuthIntegrationE2E(t *testing.T) {
 	})
 
 	t.Run("Unauthorized Group Rejection", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/create", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
 		req.RemoteAddr = "127.0.0.1:4000"
 		req.Header.Set("Remote-User", "guest@company.com")
 		req.Header.Set("Remote-Groups", "Guests")
@@ -665,7 +673,7 @@ func TestForwardAuthIntegrationE2E(t *testing.T) {
 	})
 
 	t.Run("Public Secret Redemption Bypasses Auth", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/get/57a87bbd-fc58-4716-aa36-511d027a40aa", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/get/57a87bbd-fc58-4716-aa36-511d027a40aa", nil)
 		req.RemoteAddr = "203.0.113.10:1234" // Anonymous recipient IP
 
 		rr := httptest.NewRecorder()

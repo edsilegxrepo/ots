@@ -79,6 +79,7 @@ func NewAPI(s storage.Storage, c *metrics.Collector) *APIServer {
 	}
 }
 
+//nolint:revive // Legacy internal helper constructor
 func newAPI(s storage.Storage, c *metrics.Collector) *APIServer {
 	return NewAPI(s, c)
 }

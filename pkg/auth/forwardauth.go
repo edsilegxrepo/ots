@@ -9,17 +9,19 @@ import (
 	"time"
 )
 
-var (
-	ErrUntrustedProxy = errors.New("untrusted proxy IP: forwardauth headers rejected")
-	ErrMissingUser    = errors.New("missing authenticated user header")
-)
-
 // ForwardAuthAuthenticator evaluates HTTP headers injected by reverse proxies (Authelia, Authentik, OAuth2-Proxy, Pomerium, Okta).
 type ForwardAuthAuthenticator struct {
 	config ForwardAuthConfig
 	nets   []*net.IPNet
 	ips    []net.IP
 }
+
+var (
+	// ErrUntrustedProxy is returned when forwardauth headers originate from an untrusted remote IP.
+	ErrUntrustedProxy = errors.New("untrusted proxy IP: forwardauth headers rejected")
+	// ErrMissingUser is returned when a trusted proxy request lacks the required authenticated user header.
+	ErrMissingUser = errors.New("missing authenticated user header")
+)
 
 // NewForwardAuthAuthenticator initializes a new ForwardAuth header authenticator.
 func NewForwardAuthAuthenticator(cfg ForwardAuthConfig) (*ForwardAuthAuthenticator, error) {
@@ -29,8 +31,6 @@ func NewForwardAuthAuthenticator(cfg ForwardAuthConfig) (*ForwardAuthAuthenticat
 
 	fa := &ForwardAuthAuthenticator{
 		config: cfg,
-		nets:   make([]*net.IPNet, 0),
-		ips:    make([]net.IP, 0),
 	}
 
 	if cfg.UserHeader == "" {
@@ -69,6 +69,40 @@ func NewForwardAuthAuthenticator(cfg ForwardAuthConfig) (*ForwardAuthAuthenticat
 	return fa, nil
 }
 
+// Authenticate extracts identity from incoming HTTP request headers if remoteAddr is a trusted proxy.
+func (fa *ForwardAuthAuthenticator) Authenticate(r *http.Request) (*UserIdentity, error) {
+	if !fa.IsTrustedProxy(r.RemoteAddr) {
+		return nil, ErrUntrustedProxy
+	}
+
+	username := strings.TrimSpace(r.Header.Get(fa.config.UserHeader))
+	if username == "" {
+		return nil, ErrMissingUser
+	}
+
+	email := strings.TrimSpace(r.Header.Get(fa.config.EmailHeader))
+	rawGroups := strings.TrimSpace(r.Header.Get(fa.config.GroupsHeader))
+
+	var groups []string
+	if rawGroups != "" {
+		parts := strings.SplitSeq(rawGroups, fa.config.HeaderDelimiter)
+		for p := range parts {
+			clean := strings.TrimSpace(p)
+			if clean != "" {
+				groups = append(groups, clean)
+			}
+		}
+	}
+
+	return &UserIdentity{
+		Username: username,
+		Email:    email,
+		Groups:   groups,
+		Provider: "forwardauth",
+		AuthTime: time.Now(),
+	}, nil
+}
+
 // IsTrustedProxy verifies whether remoteAddr belongs to configured trustedProxies.
 func (fa *ForwardAuthAuthenticator) IsTrustedProxy(remoteAddr string) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)
@@ -94,38 +128,4 @@ func (fa *ForwardAuthAuthenticator) IsTrustedProxy(remoteAddr string) bool {
 	}
 
 	return false
-}
-
-// Authenticate extracts identity from incoming HTTP request headers if remoteAddr is a trusted proxy.
-func (fa *ForwardAuthAuthenticator) Authenticate(r *http.Request) (*UserIdentity, error) {
-	if !fa.IsTrustedProxy(r.RemoteAddr) {
-		return nil, ErrUntrustedProxy
-	}
-
-	username := strings.TrimSpace(r.Header.Get(fa.config.UserHeader))
-	if username == "" {
-		return nil, ErrMissingUser
-	}
-
-	email := strings.TrimSpace(r.Header.Get(fa.config.EmailHeader))
-	rawGroups := strings.TrimSpace(r.Header.Get(fa.config.GroupsHeader))
-
-	groups := make([]string, 0)
-	if rawGroups != "" {
-		parts := strings.Split(rawGroups, fa.config.HeaderDelimiter)
-		for _, p := range parts {
-			clean := strings.TrimSpace(p)
-			if clean != "" {
-				groups = append(groups, clean)
-			}
-		}
-	}
-
-	return &UserIdentity{
-		Username: username,
-		Email:    email,
-		Groups:   groups,
-		Provider: "forwardauth",
-		AuthTime: time.Now(),
-	}, nil
 }

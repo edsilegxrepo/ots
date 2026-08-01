@@ -82,7 +82,7 @@ func TestCLIAttachmentCreationE2EAgainstLiveServer(t *testing.T) {
 	// Create temporary attachment file
 	tmpDir := t.TempDir()
 	attachmentPath := filepath.Join(tmpDir, "confidential.pdf")
-	err := os.WriteFile(attachmentPath, []byte("%PDF-1.4 E2E Live Test Document Content"), 0600)
+	err := os.WriteFile(attachmentPath, []byte("%PDF-1.4 E2E Live Test Document Content"), 0o600)
 	require.NoError(t, err)
 
 	// Secret with binary attachment payload

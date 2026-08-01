@@ -4,16 +4,16 @@
  * @returns string
  */
 function bytesToHuman(bytes: number): string {
-	for (const t of [
-		{ thresh: 1024 * 1024, unit: "MiB" },
-		{ thresh: 1024, unit: "KiB" },
-	]) {
-		if (bytes > t.thresh) {
-			return `${(bytes / t.thresh).toFixed(1)} ${t.unit}`;
-		}
-	}
+  for (const t of [
+    { thresh: 1024 * 1024, unit: "MiB" },
+    { thresh: 1024, unit: "KiB" },
+  ]) {
+    if (bytes > t.thresh) {
+      return `${(bytes / t.thresh).toFixed(1)} ${t.unit}`;
+    }
+  }
 
-	return `${bytes} B`;
+  return `${bytes} B`;
 }
 
 export { bytesToHuman };

@@ -8,10 +8,10 @@ import i18n from "./i18n.ts";
 import router from "./router.ts";
 
 const app = createApp({
-	name: "OTS",
-	render() {
-		return h(appView);
-	},
+  name: "OTS",
+  render() {
+    return h(appView);
+  },
 });
 
 app.use(i18n);

@@ -55,15 +55,15 @@ type (
 		DisableFileAttachment      bool     `json:"disableFileAttachment" yaml:"disableFileAttachment"`
 		MaxAttachmentSizeTotal     int64    `json:"maxAttachmentSizeTotal" yaml:"maxAttachmentSizeTotal"`
 
-		FileGroupsPath        string        `json:"-" yaml:"fileGroupsPath"`
-		MaxSecretSize         int64         `json:"-" yaml:"maxSecretSize"`
-		MetricsAllowedSubnets []string      `json:"-" yaml:"metricsAllowedSubnets"`
-		OverlayFSPath         string        `json:"-" yaml:"overlayFSPath"`
-		RateLimitCreate       int           `json:"-" yaml:"rateLimitCreate"`
-		TrustedProxies        []string      `json:"-" yaml:"trustedProxies"`
-		ResolvedTrustedCIDRs  []*net.IPNet  `json:"-" yaml:"-"`
-		ResolvedTrustedIPs    []net.IP      `json:"-" yaml:"-"`
-		UseFormalLanguage     bool          `json:"-" yaml:"useFormalLanguage"`
+		FileGroupsPath        string       `json:"-" yaml:"fileGroupsPath"`
+		MaxSecretSize         int64        `json:"-" yaml:"maxSecretSize"`
+		MetricsAllowedSubnets []string     `json:"-" yaml:"metricsAllowedSubnets"`
+		OverlayFSPath         string       `json:"-" yaml:"overlayFSPath"`
+		RateLimitCreate       int          `json:"-" yaml:"rateLimitCreate"`
+		TrustedProxies        []string     `json:"-" yaml:"trustedProxies"`
+		ResolvedTrustedCIDRs  []*net.IPNet `json:"-" yaml:"-"`
+		ResolvedTrustedIPs    []net.IP     `json:"-" yaml:"-"`
+		UseFormalLanguage     bool         `json:"-" yaml:"useFormalLanguage"`
 
 		FooterLinks []FooterLink `json:"footerLinks,omitempty" yaml:"footerLinks"`
 	}

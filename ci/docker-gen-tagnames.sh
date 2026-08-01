@@ -29,8 +29,7 @@ case "${GITHUB_REF_TYPE}" in
 esac
 
 # Safe: Scoped locally to a subshell without modifying global IFS
-# nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering
 (
-  IFS=,
+  IFS=, # nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering
   echo "docker_build_tags=${tags[*]}" >> "${GITHUB_OUTPUT}"
 )

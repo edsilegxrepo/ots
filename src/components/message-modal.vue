@@ -359,7 +359,8 @@ export default defineComponent({
 						decryption_key: this.securePassword,
 						expiration: this.isoExpiration,
 						header: `DECRYPTION KEY TRANSMISSION [${this.secretId}]`,
-						instructions: "Paste this key when prompted after opening your secret link.",
+						instructions:
+							"Paste this key when prompted after opening your secret link.",
 						secret_id: this.secretId,
 						type: "dual_channel_decryption_key",
 					},
@@ -437,14 +438,14 @@ export default defineComponent({
 
 		formatLabel(): string {
 			switch (this.selectedFormat) {
-			case "json":
-				return "JSON Payload";
-			case "html":
-				return "HTML Email Box";
-			case "md":
-				return "Markdown";
-			default:
-				return "Plain Text / ASCII";
+				case "json":
+					return "JSON Payload";
+				case "html":
+					return "HTML Email Box";
+				case "md":
+					return "Markdown";
+				default:
+					return "Plain Text / ASCII";
 			}
 		},
 
@@ -458,7 +459,8 @@ export default defineComponent({
 					burn_on_read: true,
 					expiration: this.isoExpiration,
 					header: `CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]`,
-					instructions: "Accessing this URL decrypts the payload and PERMANENTLY BURNS (deletes) the secret from the server.",
+					instructions:
+						"Accessing this URL decrypts the payload and PERMANENTLY BURNS (deletes) the secret from the server.",
 					secret_id: this.secretId,
 					secret_url: this.secretUrl,
 					type: "one_time_secret",

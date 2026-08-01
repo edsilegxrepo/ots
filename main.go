@@ -29,7 +29,14 @@ import (
 	"github.com/Luzifer/ots/pkg/metrics"
 )
 
-const scriptNonceSize = 32
+const (
+	scriptNonceSize    = 32
+	defaultLogFileMode = 0o644
+	ExitSuccess        = 0
+	ExitConfigError    = 2
+	ExitStorageError   = 3
+	ExitNetworkError   = 4
+)
 
 var (
 	cfg struct {
@@ -73,6 +80,7 @@ func defaultCSP() httphelpers.CSP {
 	return c
 }
 
+//nolint:revive // enableTLS parameter is a deliberate configuration control flag for socket hardening
 func hardenListener(listen string, enableTLS bool) string {
 	if !enableTLS {
 		if listen != ":3000" {
@@ -114,7 +122,8 @@ func initApp() error {
 	}
 
 	if cfg.LogFilePath != "" {
-		logFile, err := os.OpenFile(cfg.LogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		// #nosec G302 -- Log file permissions 0644 are standard for server logging
+		logFile, err := os.OpenFile(cfg.LogFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, defaultLogFileMode)
 		if err != nil {
 			return fmt.Errorf("opening log-file-path %q: %w", cfg.LogFilePath, err)
 		}
@@ -127,7 +136,7 @@ func initApp() error {
 
 	frontendFS, err := fs.Sub(embeddedAssets, "frontend")
 	if err != nil {
-		return fmt.Errorf("creating sub-fs for assets: %W", err)
+		return fmt.Errorf("creating sub-fs for assets: %w", err)
 	}
 	assets = append(assets, frontendFS)
 
@@ -139,13 +148,6 @@ func initApp() error {
 
 	return nil
 }
-
-const (
-	ExitSuccess      = 0
-	ExitConfigError  = 2
-	ExitStorageError = 3
-	ExitNetworkError = 4
-)
 
 func main() {
 	var err error
@@ -178,54 +180,7 @@ func main() {
 	}
 	api := NewAPI(store, collector)
 
-	// Initialize server
-	r := mux.NewRouter()
-
-	api.Register(r.PathPrefix("/api").Subrouter())
-
-	r.Handle("/metrics", handleRemoveAcceptEncoding(metrics.Handler())).
-		Methods(http.MethodGet).
-		MatcherFunc(func(r *http.Request, _ *mux.RouteMatch) bool {
-			return requestInSubnetList(r, cust.MetricsAllowedSubnets)
-		})
-
-	r.HandleFunc("/robots.txt", handleRobots).
-		Methods(http.MethodGet)
-	r.HandleFunc("/", handleIndex).
-		Methods(http.MethodGet)
-	r.PathPrefix("/").HandlerFunc(assetDelivery).
-		Methods(http.MethodGet)
-
-	var hdl http.Handler = r
-
-	if cfg.IAMConfigFile != "" {
-		iamData, err := os.ReadFile(cfg.IAMConfigFile)
-		if err != nil {
-			logrus.WithError(err).Fatalf("failed to read iam-config file '%s'", cfg.IAMConfigFile)
-		}
-		iamCfg, err := auth.LoadIAMConfig(iamData)
-		if err != nil {
-			logrus.WithError(err).Fatalf("failed to parse iam-config YAML '%s'", cfg.IAMConfigFile)
-		}
-		localAuth, err := auth.NewLocalAuthenticator(iamCfg.UsersFilePath)
-		if err != nil {
-			logrus.WithError(err).Warnf("failed to load local users file '%s'", iamCfg.UsersFilePath)
-		}
-		authMW, err := auth.NewAuthMiddleware(iamCfg, localAuth)
-		if err != nil {
-			logrus.WithError(err).Fatalf("failed to initialize IAM auth middleware")
-		}
-		hdl = authMW.Handler(hdl)
-		logrus.WithFields(logrus.Fields{
-			"iam_config": cfg.IAMConfigFile,
-			"connector":  iamCfg.Connector,
-		}).Info("IAM Authentication middleware enabled")
-	}
-
-	hdl = httphelpers.GzipHandler(hdl)
-	if cfg.LogRequests {
-		hdl = httphelpers.NewHTTPLogHandlerWithLogger(hdl, logrus.StandardLogger())
-	}
+	hdl := setupHTTPHandler(api)
 
 	server := &http.Server{
 		Addr:              cfg.Listen,
@@ -276,15 +231,68 @@ func main() {
 	logrus.Info("Shutting down server gracefully...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	if shutdownErr := server.Shutdown(shutdownCtx); shutdownErr != nil {
+		cancel()
 		logrus.WithError(shutdownErr).Error("Server forced to shutdown")
 		os.Exit(ExitNetworkError)
 	}
+	cancel()
 
 	logrus.Info("Server stopped cleanly")
 	os.Exit(ExitSuccess)
+}
+
+func setupHTTPHandler(api *APIServer) http.Handler {
+	r := mux.NewRouter()
+
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	r.Handle("/metrics", handleRemoveAcceptEncoding(metrics.Handler())).
+		Methods(http.MethodGet).
+		MatcherFunc(func(r *http.Request, _ *mux.RouteMatch) bool {
+			return requestInSubnetList(r, cust.MetricsAllowedSubnets)
+		})
+
+	r.HandleFunc("/robots.txt", handleRobots).
+		Methods(http.MethodGet)
+	r.HandleFunc("/", handleIndex).
+		Methods(http.MethodGet)
+	r.PathPrefix("/").HandlerFunc(assetDelivery).
+		Methods(http.MethodGet)
+
+	var hdl http.Handler = r
+
+	if cfg.IAMConfigFile != "" {
+		iamData, err := os.ReadFile(cfg.IAMConfigFile)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to read iam-config file '%s'", cfg.IAMConfigFile)
+		}
+		iamCfg, err := auth.LoadIAMConfig(iamData)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to parse iam-config YAML '%s'", cfg.IAMConfigFile)
+		}
+		localAuth, err := auth.NewLocalAuthenticator(iamCfg.UsersFilePath)
+		if err != nil {
+			logrus.WithError(err).Warnf("failed to load local users file '%s'", iamCfg.UsersFilePath)
+		}
+		authMW, err := auth.NewAuthMiddleware(iamCfg, localAuth)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to initialize IAM auth middleware")
+		}
+		hdl = authMW.Handler(hdl)
+		logrus.WithFields(logrus.Fields{
+			"iam_config": cfg.IAMConfigFile,
+			"connector":  iamCfg.Connector,
+		}).Info("IAM Authentication middleware enabled")
+	}
+
+	hdl = httphelpers.GzipHandler(hdl)
+	if cfg.LogRequests {
+		hdl = httphelpers.NewHTTPLogHandlerWithLogger(hdl, logrus.StandardLogger())
+	}
+
+	return hdl
 }
 
 func assetDelivery(w http.ResponseWriter, r *http.Request) {

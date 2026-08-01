@@ -5,18 +5,18 @@ import (
 	"strings"
 )
 
+// RBACEvaluator handles group-based authorization checks against IAMPolicy.
+type RBACEvaluator struct {
+	policy             IAMPolicy
+	protectedEndpoints map[string]bool
+}
+
 func cleanPath(p string) string {
 	c := path.Clean(strings.TrimSpace(p))
 	if c == "." {
 		return "/"
 	}
 	return c
-}
-
-// RBACEvaluator handles group-based authorization checks against IAMPolicy.
-type RBACEvaluator struct {
-	policy             IAMPolicy
-	protectedEndpoints map[string]bool
 }
 
 // NewRBACEvaluator creates a new RBAC policy evaluator.
@@ -33,27 +33,6 @@ func NewRBACEvaluator(policy IAMPolicy, protectedEndpoints []string) *RBACEvalua
 		policy:             policy,
 		protectedEndpoints: peMap,
 	}
-}
-
-// IsProtectedEndpoint returns true if the requested HTTP path requires authentication.
-func (r *RBACEvaluator) IsProtectedEndpoint(reqPath string) bool {
-	reqPath = cleanPath(reqPath)
-
-	// Redemption endpoints are strictly public & anonymous
-	if reqPath == "/secret" || strings.HasPrefix(reqPath, "/api/get/") || reqPath == "/api/healthz" || reqPath == "/api/isWritable" || reqPath == "/api/settings" {
-		return false
-	}
-
-	if r.protectedEndpoints[reqPath] {
-		return true
-	}
-
-	// Default protection for secret creation
-	if reqPath == "/api/create" {
-		return true
-	}
-
-	return false
 }
 
 // IsAuthorized checks if the identity is permitted under IAMPolicy.AllowedGroups.
@@ -98,4 +77,25 @@ func (r *RBACEvaluator) IsFeatureAllowed(user *UserIdentity, featureName string)
 	}
 
 	return false, 0
+}
+
+// IsProtectedEndpoint returns true if the requested HTTP path requires authentication.
+func (r *RBACEvaluator) IsProtectedEndpoint(reqPath string) bool {
+	reqPath = cleanPath(reqPath)
+
+	// Redemption endpoints are strictly public & anonymous
+	if reqPath == "/secret" || strings.HasPrefix(reqPath, "/api/get/") || reqPath == "/api/healthz" || reqPath == "/api/isWritable" || reqPath == "/api/settings" {
+		return false
+	}
+
+	if r.protectedEndpoints[reqPath] {
+		return true
+	}
+
+	// Default protection for secret creation
+	if reqPath == "/api/create" {
+		return true
+	}
+
+	return false
 }

@@ -39,7 +39,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Normalize MSYS2 / Cygwin paths to drive:/path/sub format (e.g. e:/data/devel/build/code/public/ots)
-if command -v cygpath &>/dev/null; then
+if command -v cygpath &> /dev/null; then
   SCRIPT_DIR="$(cygpath -m "${SCRIPT_DIR}")"
   ROOT_DIR="$(cygpath -m "${ROOT_DIR}")"
 fi
@@ -67,7 +67,7 @@ BIN_DIR="${ROOT_DIR}/testfiles/bin"
 
 # Sub-Step 1.3: Render Help & Usage Information
 show_usage() {
-  cat <<'EOF'
+  cat << 'EOF'
 Enterprise Cross-Platform Build, Maintenance & Daemon Orchestration Suite
 
 Usage:
@@ -105,7 +105,7 @@ resolve_redis() {
   # 1. If <path> specified, add to PATH
   if [ -n "${REDIS_ARG_PATH}" ]; then
     local p="${REDIS_ARG_PATH}"
-    if command -v cygpath &>/dev/null; then
+    if command -v cygpath &> /dev/null; then
       local u_path
       u_path="$(cygpath -u "${p}")"
       export PATH="${u_path}:${PATH}"
@@ -116,12 +116,12 @@ resolve_redis() {
 
   # 2. If redis found in path, set REDIS_HOME
   local bin=""
-  if command -v redis-server &>/dev/null; then
+  if command -v redis-server &> /dev/null; then
     bin="$(command -v redis-server)"
   fi
 
   if [ -n "${bin}" ]; then
-    if command -v cygpath &>/dev/null; then
+    if command -v cygpath &> /dev/null; then
       bin="$(cygpath -m "${bin}")"
     fi
     REDIS_BIN="${bin}"
@@ -132,7 +132,7 @@ resolve_redis() {
   # 3. If not, inspect for REDIS_HOME
   if [ -n "${REDIS_HOME}" ]; then
     local rh="${REDIS_HOME}"
-    if command -v cygpath &>/dev/null; then
+    if command -v cygpath &> /dev/null; then
       rh="$(cygpath -m "${rh}")"
     fi
     if [ -f "${rh}/redis-server.exe" ]; then
@@ -152,7 +152,7 @@ resolve_redis() {
 }
 
 # Sub-Step 1.4: Pre-Flight Environment Validation
-if ! command -v go &>/dev/null; then
+if ! command -v go &> /dev/null; then
   echo "ERROR: Go toolchain ('go') is not installed or not in PATH." >&2
   exit 1
 fi
@@ -162,14 +162,14 @@ fi
 # -----------------------------------------------------------------------------
 stop_redis_server() {
   echo "==> Stopping running Redis processes..."
-  if command -v pkill &>/dev/null; then
-    pkill -f "redis-server" 2>/dev/null || true
+  if command -v pkill &> /dev/null; then
+    pkill -f "redis-server" 2> /dev/null || true
   fi
-  if command -v taskkill &>/dev/null; then
-    taskkill /F /IM redis-server.exe 2>/dev/null || true
+  if command -v taskkill &> /dev/null; then
+    taskkill /F /IM redis-server.exe 2> /dev/null || true
   fi
-  if command -v powershell &>/dev/null; then
-    powershell -Command "Get-Process -Name redis-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+  if command -v powershell &> /dev/null; then
+    powershell -Command "Get-Process -Name redis-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2> /dev/null || true
   fi
   sleep 1
 }
@@ -182,15 +182,15 @@ start_redis_server() {
   fi
 
   echo "==> Starting Redis server (${REDIS_BIN}) on port ${port}..."
-  if command -v cygpath &>/dev/null; then
+  if command -v cygpath &> /dev/null; then
     WIN_REDIS="$(cygpath -m "${REDIS_BIN}")"
-    if command -v powershell &>/dev/null; then
-      powershell -Command "Start-Process -FilePath '${WIN_REDIS}' -ArgumentList '--port', '${port}', '--daemonize', 'no' -WindowStyle Hidden" >/dev/null 2>&1 || true
+    if command -v powershell &> /dev/null; then
+      powershell -Command "Start-Process -FilePath '${WIN_REDIS}' -ArgumentList '--port', '${port}', '--daemonize', 'no' -WindowStyle Hidden" > /dev/null 2>&1 || true
     else
-      "${WIN_REDIS}" --port "${port}" --daemonize no >/dev/null 2>&1 &
+      "${WIN_REDIS}" --port "${port}" --daemonize no > /dev/null 2>&1 &
     fi
   else
-    nohup "${REDIS_BIN}" --port "${port}" --daemonize no >/dev/null 2>&1 &
+    nohup "${REDIS_BIN}" --port "${port}" --daemonize no > /dev/null 2>&1 &
   fi
   sleep 1
   echo "    Redis server started on 127.0.0.1:${port}."
@@ -199,18 +199,18 @@ start_redis_server() {
 kill_running_ots_processes() {
   echo "==> Terminating any running OTS server processes..."
   # Sub-Step 2.1: Terminate Stale Server Processes via pkill (Linux/macOS)
-  if command -v pkill &>/dev/null; then
-    pkill -f "ots.*--listen" 2>/dev/null || true
+  if command -v pkill &> /dev/null; then
+    pkill -f "ots.*--listen" 2> /dev/null || true
   fi
   # Sub-Step 2.2: Terminate Stale Server Processes via taskkill (Windows CMD/Cygwin)
-  if command -v taskkill &>/dev/null; then
-    taskkill /F /IM ots.exe 2>/dev/null || true
-    taskkill /F /IM ots_windows_amd64.exe 2>/dev/null || true
-    taskkill /F /IM ots_linux_amd64 2>/dev/null || true
+  if command -v taskkill &> /dev/null; then
+    taskkill /F /IM ots.exe 2> /dev/null || true
+    taskkill /F /IM ots_windows_amd64.exe 2> /dev/null || true
+    taskkill /F /IM ots_linux_amd64 2> /dev/null || true
   fi
   # Sub-Step 2.3: Terminate Stale Server Processes via PowerShell (Windows PS)
-  if command -v powershell &>/dev/null; then
-    powershell -Command "Get-Process -Name ots,ots_windows_amd64,ots_linux_amd64 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+  if command -v powershell &> /dev/null; then
+    powershell -Command "Get-Process -Name ots,ots_windows_amd64,ots_linux_amd64 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2> /dev/null || true
   fi
   sleep 1
 }
@@ -235,7 +235,7 @@ while [ $# -gt 0 ]; do
           BUILD_LINUX=true
           BUILD_WINDOWS=false
           ;;
-        windows,linux|linux,windows|all|both)
+        windows,linux | linux,windows | all | both)
           BUILD_LINUX=true
           BUILD_WINDOWS=true
           ;;
@@ -259,7 +259,7 @@ while [ $# -gt 0 ]; do
           BUILD_LINUX=true
           BUILD_WINDOWS=false
           ;;
-        windows,linux|linux,windows|all|both)
+        windows,linux | linux,windows | all | both)
           BUILD_LINUX=true
           BUILD_WINDOWS=true
           ;;
@@ -304,7 +304,7 @@ while [ $# -gt 0 ]; do
       BUILD_VALIDATE=true
       shift
       ;;
-    --kill-running|--clean-processes)
+    --kill-running | --clean-processes)
       KILL_RUNNING=true
       shift
       ;;
@@ -313,7 +313,7 @@ while [ $# -gt 0 ]; do
       KILL_RUNNING=true
       shift
       ;;
-    --update-deps|--upgrade-deps)
+    --update-deps | --upgrade-deps)
       UPDATE_DEPS=true
       shift
       ;;
@@ -330,7 +330,7 @@ while [ $# -gt 0 ]; do
         shift
       fi
       ;;
-    -h|--help)
+    -h | --help)
       show_usage
       ;;
     -*)
@@ -359,8 +359,8 @@ resolve_redis
 # -----------------------------------------------------------------------------
 # Sub-Step 4.1: Query Git Revision Metadata (Tags & Short Commits)
 if [ "${BUILD_AUTO_VERSION}" = "true" ] || [ -z "${VERSION_ARG}" ]; then
-  GIT_TAG="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "1.21.9")"
-  GIT_HASH="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "dev")"
+  GIT_TAG="$(git -C "${ROOT_DIR}" describe --tags --abbrev=0 2> /dev/null | sed 's/^v//' || echo "1.21.9")"
+  GIT_HASH="$(git -C "${ROOT_DIR}" rev-parse --short HEAD 2> /dev/null || echo "dev")"
   VERSION_FULL="${GIT_TAG}-${GIT_HASH}"
 else
   VERSION_FULL="${VERSION_ARG}"
@@ -374,7 +374,7 @@ TAG="${VERSION_FULL#*-}"
 # Sub-Step 4.3: Render Informational Release Banner
 echo "================================================================="
 echo " Building ${BUILD_ID^^} Release: ${VERSION_FULL}"
-echo " Environment: $(uname -s 2>/dev/null || echo "unknown") (${MACHTYPE:-unknown})"
+echo " Environment: $(uname -s 2> /dev/null || echo "unknown") (${MACHTYPE:-unknown})"
 echo " Version: ${VERSION} | Tag: ${TAG} | English Only: ${BUILD_ENGLISH_ONLY}"
 echo "================================================================="
 
@@ -396,15 +396,15 @@ if [ "${UPDATE_DEPS}" = "true" ]; then
 
   # Sub-Step 5.2: Upgrade Node.js & Vue Packages via Package Manager (pnpm / npm)
   echo "2. Upgrading Node.js / Vue packages via pnpm..."
-  if command -v pnpm &>/dev/null; then
+  if command -v pnpm &> /dev/null; then
     pnpm update --latest
-  elif command -v npm &>/dev/null; then
+  elif command -v npm &> /dev/null; then
     npm update
   fi
 
   # Sub-Step 5.3: Execute Security Vulnerability Audit (govulncheck)
   echo "3. Auditing Go dependencies..."
-  if command -v govulncheck &>/dev/null; then
+  if command -v govulncheck &> /dev/null; then
     govulncheck ./... || true
   fi
   echo "================================================================="
@@ -427,17 +427,17 @@ fi
 # Sub-Step 6.2: Build & Execute i18n Translation Generation Tool (ci/translate)
 if [ -d "ci/translate" ]; then
   echo "==> Generating i18n translations..."
-  if ! (cd ci/translate && go build -o translate_tool main.go 2>/dev/null); then
+  if ! (cd ci/translate && go build -o translate_tool main.go 2> /dev/null); then
     (cd ci/translate && go build -o translate_tool)
   fi
   ./ci/translate/translate_tool || true
-  rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2>/dev/null || true
+  rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2> /dev/null || true
 fi
 
 # Sub-Step 6.3: Immediately Restore Original i18n.yaml Configuration
 if [ "${BUILD_ENGLISH_ONLY}" = "true" ]; then
   echo "==> Restoring original i18n.yaml file..."
-  mv -f i18n.yaml.bak i18n.yaml 2>/dev/null || true
+  mv -f i18n.yaml.bak i18n.yaml 2> /dev/null || true
   trap - EXIT INT TERM HUP
 fi
 
@@ -446,14 +446,14 @@ fi
 # -----------------------------------------------------------------------------
 echo "==> Checking Frontend Build Dependencies..."
 # Sub-Step 7.1: Detect Available JavaScript Package Manager (pnpm / npm)
-if command -v pnpm &>/dev/null; then
+if command -v pnpm &> /dev/null; then
   # Sub-Step 7.2: Install Frontend Dependencies & Execute esbuild Bundler (ci/build.mjs)
   echo "    Building frontend with pnpm (ci/build.mjs)..."
-  pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+  pnpm install --frozen-lockfile 2> /dev/null || pnpm install
   pnpm node ci/build.mjs || node ci/build.mjs || true
-elif command -v npm &>/dev/null; then
+elif command -v npm &> /dev/null; then
   echo "    Building frontend with npm (ci/build.mjs)..."
-  npm install --no-audit --no-fund 2>/dev/null || npm install
+  npm install --no-audit --no-fund 2> /dev/null || npm install
   node ci/build.mjs || true
 # Sub-Step 7.3: Fallback to Pre-Built Embedded Go Assets
 elif [ -d "frontend/dist" ] || [ -f "frontend/dist/index.html" ]; then
@@ -483,7 +483,7 @@ build_binary() {
   local output_cli="${BIN_DIR}/ots-cli_${target_os}_${target_arch}${bin_suffix}"
 
   echo "==> Compiling for ${target_os}/${target_arch}..."
-  
+
   # Build main server binary with stripped symbols & version injection
   if ! GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
     go build -v -mod=readonly -trimpath \
@@ -544,8 +544,8 @@ if [ "${NO_PACKAGE}" = "false" ]; then
     rm -rf "${LINUX_STAGING}"
     mkdir -p "${LINUX_STAGING}/etc/custom" "${LINUX_STAGING}/log" "${LINUX_STAGING}/systemd"
 
-    cp -f "${BIN_DIR}/ots_linux_amd64" "${LINUX_STAGING}/ots" 2>/dev/null || true
-    cp -f "${BIN_DIR}/ots-cli_linux_amd64" "${LINUX_STAGING}/ots-cli" 2>/dev/null || true
+    cp -f "${BIN_DIR}/ots_linux_amd64" "${LINUX_STAGING}/ots" 2> /dev/null || true
+    cp -f "${BIN_DIR}/ots-cli_linux_amd64" "${LINUX_STAGING}/ots-cli" 2> /dev/null || true
     [ -f "${SCRIPT_DIR}/ots-config.yaml" ] && cp -f "${SCRIPT_DIR}/ots-config.yaml" "${LINUX_STAGING}/etc/ots-config.yaml"
     [ -f "${SCRIPT_DIR}/ots.sysconfig" ] && cp -f "${SCRIPT_DIR}/ots.sysconfig" "${LINUX_STAGING}/etc/ots.env"
     [ -f "${SCRIPT_DIR}/ots.service" ] && cp -f "${SCRIPT_DIR}/ots.service" "${LINUX_STAGING}/systemd/ots.service"
@@ -563,21 +563,21 @@ if [ "${NO_PACKAGE}" = "false" ]; then
     rm -rf "${WIN_STAGING}"
     mkdir -p "${WIN_STAGING}/bin" "${WIN_STAGING}/etc/custom" "${WIN_STAGING}/log"
 
-    cp -f "${BIN_DIR}/ots_windows_amd64.exe" "${WIN_STAGING}/bin/ots.exe" 2>/dev/null || true
-    cp -f "${BIN_DIR}/ots-cli_windows_amd64.exe" "${WIN_STAGING}/bin/ots-cli.exe" 2>/dev/null || true
+    cp -f "${BIN_DIR}/ots_windows_amd64.exe" "${WIN_STAGING}/bin/ots.exe" 2> /dev/null || true
+    cp -f "${BIN_DIR}/ots-cli_windows_amd64.exe" "${WIN_STAGING}/bin/ots-cli.exe" 2> /dev/null || true
 
     if [ -f "${SCRIPT_DIR}/ots-config.yaml" ]; then
       cp -f "${SCRIPT_DIR}/ots-config.yaml" "${WIN_STAGING}/etc/ots-config.yaml"
-      sed -i 's|/etc/ots/custom|c:/inetd/ots/etc/custom|g' "${WIN_STAGING}/etc/ots-config.yaml" 2>/dev/null || true
+      sed -i 's|/etc/ots/custom|c:/inetd/ots/etc/custom|g' "${WIN_STAGING}/etc/ots-config.yaml" 2> /dev/null || true
     fi
     if [ -f "${SCRIPT_DIR}/ots.sysconfig" ]; then
       cp -f "${SCRIPT_DIR}/ots.sysconfig" "${WIN_STAGING}/etc/ots.env"
-      sed -i 's|/etc/ots/ots-config.yaml|c:/inetd/ots/etc/ots-config.yaml|g' "${WIN_STAGING}/etc/ots.env" 2>/dev/null || true
+      sed -i 's|/etc/ots/ots-config.yaml|c:/inetd/ots/etc/ots-config.yaml|g' "${WIN_STAGING}/etc/ots.env" 2> /dev/null || true
     fi
     echo "ots-${VERSION}-${TAG}-windows_amd64" > "${WIN_STAGING}/etc/ots.version"
 
     WIN_ARCHIVE="${OUTPUT_DIR}/ots-${VERSION}-${TAG}-windows_amd64.zip"
-    if command -v zip &>/dev/null; then
+    if command -v zip &> /dev/null; then
       (cd "${WIN_STAGING}" && zip -r "${WIN_ARCHIVE}" ./*)
     else
       echo "    Notice: 'zip' command not found, skipping ZIP compression."
@@ -613,7 +613,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
   SERVER_BIN=""
 
   # Select compiled binary for current host platform
-  if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && [[ "$(uname -s 2>/dev/null || echo "")" == *"NT"* || "$(uname -s 2>/dev/null || echo "")" == *"CYGWIN"* || "$(uname -s 2>/dev/null || echo "")" == *"MSYS"* || "$(uname -s 2>/dev/null || echo "")" == *"MINGW"* ]]; then
+  if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && [[ "$(uname -s 2> /dev/null || echo "")" == *"NT"* || "$(uname -s 2> /dev/null || echo "")" == *"CYGWIN"* || "$(uname -s 2> /dev/null || echo "")" == *"MSYS"* || "$(uname -s 2> /dev/null || echo "")" == *"MINGW"* ]]; then
     SERVER_BIN="${BIN_DIR}/ots_windows_amd64.exe"
   elif [ -f "${BIN_DIR}/ots_linux_amd64" ]; then
     SERVER_BIN="${BIN_DIR}/ots_linux_amd64"
@@ -634,7 +634,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
   READY=false
   for _ in {1..10}; do
-    if curl -s "${TEST_URL}/healthz" &>/dev/null; then
+    if curl -s "${TEST_URL}/healthz" &> /dev/null; then
       READY=true
       break
     fi
@@ -643,20 +643,20 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
   if [ "${READY}" = "false" ]; then
     echo "    Validation FAILED: Server failed to respond on ${TEST_URL}/healthz"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
   # Sub-Step 11.3: Verify /api/healthz, /api/isWritable, and /api/settings Endpoints
   echo "    1. Testing /api/healthz & /api/isWritable endpoints..."
-  curl -sSf "${TEST_URL}/healthz" &>/dev/null
-  curl -sSf "${TEST_URL}/isWritable" &>/dev/null
+  curl -sSf "${TEST_URL}/healthz" &> /dev/null
+  curl -sSf "${TEST_URL}/isWritable" &> /dev/null
 
   echo "    2. Testing /api/settings endpoint..."
   SETTINGS_RESP="$(curl -sSf "${TEST_URL}/settings")"
   if [[ "${SETTINGS_RESP}" != *"appTitle"* ]]; then
     echo "    Validation FAILED: /api/settings returned invalid response: ${SETTINGS_RESP}"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
@@ -667,7 +667,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
   if [ -z "${SECRET_ID}" ]; then
     echo "    Validation FAILED: Could not parse secret_id from response: ${CREATE_RESP}"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
@@ -675,7 +675,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
   GET_RESP="$(curl -sSf "${TEST_URL}/get/${SECRET_ID}")"
   if [[ "${GET_RESP}" != *"Validation Test Payload"* ]]; then
     echo "    Validation FAILED: Secret payload mismatch: ${GET_RESP}"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
@@ -683,17 +683,17 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
   HTTP_CODE="$(curl -s -o /dev/null -w "%{http_code}" "${TEST_URL}/get/${SECRET_ID}")"
   if [ "${HTTP_CODE}" != "404" ]; then
     echo "    Validation FAILED: Second read returned status ${HTTP_CODE}, expected 404 Not Found"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
   # Sub-Step 11.5: Test High-Capacity Payload Transfer (~75 MiB Payload Capacity)
   echo "    4. Testing Large Secret Payload (~75 MiB payload capacity)..."
-  LARGE_CREATE_RESP="$( (echo -n '{"secret":"' && head -c 75000000 /dev/zero | base64 -w 0 && echo -n '"}') | curl -sSf -X POST -H "Content-Type: application/json" --data-binary @- "${TEST_URL}/create" )"
+  LARGE_CREATE_RESP="$( (echo -n '{"secret":"' && head -c 75000000 /dev/zero | base64 -w 0 && echo -n '"}') | curl -sSf -X POST -H "Content-Type: application/json" --data-binary @- "${TEST_URL}/create")"
   LARGE_SECRET_ID="$(echo "${LARGE_CREATE_RESP}" | sed -n 's/.*"secret_id":"\([^"]*\)".*/\1/p')"
   if [ -z "${LARGE_SECRET_ID}" ]; then
     echo "    Validation FAILED: Large secret creation failed"
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     exit 1
   fi
 
@@ -701,11 +701,11 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
   if [ "${WITH_REDIS}" = "true" ] || [ -n "${REDIS_BIN}" ]; then
     echo "==> Running Live API Validation with REDIS storage..."
     REDIS_PORT="63799"
-    
+
     start_redis_server "${REDIS_PORT}"
 
     # Shut down Memory test server & wait for port socket cleanup
-    kill ${SERVER_PID} 2>/dev/null || true
+    kill ${SERVER_PID} 2> /dev/null || true
     sleep 1.5
 
     echo "    Starting compiled binary (${SERVER_BIN}) on ${TEST_LISTEN} (Storage: REDIS)..."
@@ -714,7 +714,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
     REDIS_READY=false
     for _ in {1..10}; do
-      if curl -s "${TEST_URL}/healthz" &>/dev/null; then
+      if curl -s "${TEST_URL}/healthz" &> /dev/null; then
         REDIS_READY=true
         break
       fi
@@ -740,7 +740,7 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
 
   # Sub-Step 11.7: Shutdown Test Server & Report Validation Status
   echo "    Shutting down test server (PID ${SERVER_PID})..."
-  kill ${SERVER_PID} 2>/dev/null || true
+  kill ${SERVER_PID} 2> /dev/null || true
   trap - EXIT
 
   echo "==> Live API Validation PASSED 100%!"
@@ -761,7 +761,7 @@ echo "================================================="
 if [ "${AUTO_START}" = "true" ]; then
   # Sub-Step 12.1: Terminate Stale Instances & Prepare Logging Directory (testfiles/logs)
   kill_running_ots_processes
-  
+
   USE_REDIS_DAEMON=false
   if [ "${WITH_REDIS}" = "true" ] || [ -n "${REDIS_BIN}" ]; then
     USE_REDIS_DAEMON=true
@@ -781,21 +781,21 @@ if [ "${AUTO_START}" = "true" ]; then
   fi
 
   # Sub-Step 12.2: Launch Detached Windows Background Process via PowerShell Start-Process
-  if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && command -v cygpath &>/dev/null; then
+  if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && command -v cygpath &> /dev/null; then
     EXEC_PATH="$(cygpath -m "${BIN_DIR}/ots_windows_amd64.exe")"
     CFG_PATH="$(cygpath -m "${CUSTOM_CFG}")"
     WIN_LOG_PATH="$(cygpath -m "${LOG_FILE}")"
     if [ "${USE_REDIS_DAEMON}" = "true" ]; then
-      powershell -Command "\$env:REDIS_URL='redis://127.0.0.1:6379/0'; Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--storage-type', 'redis', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
+      powershell -Command "\$env:REDIS_URL='redis://127.0.0.1:6379/0'; Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--storage-type', 'redis', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" > /dev/null 2>&1 || true
     else
-      powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
+      powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" > /dev/null 2>&1 || true
     fi
   # Sub-Step 12.3: Launch Detached Linux Background Process via nohup
   elif [ -f "${BIN_DIR}/ots_linux_amd64" ]; then
     if [ "${USE_REDIS_DAEMON}" = "true" ]; then
-      REDIS_URL="redis://127.0.0.1:6379/0" nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --storage-type redis --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &
+      REDIS_URL="redis://127.0.0.1:6379/0" nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --storage-type redis --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
     else
-      nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &
+      nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
     fi
   fi
 

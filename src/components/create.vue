@@ -244,7 +244,11 @@ export default defineComponent({
 		},
 
 		invalidFilesSelected(): boolean {
-			if (!this.customize || !this.customize.acceptedFileTypes || this.customize.acceptedFileTypes === "") {
+			if (
+				!this.customize ||
+				!this.customize.acceptedFileTypes ||
+				this.customize.acceptedFileTypes === ""
+			) {
 				// No limitation configured, no need to check
 				return false;
 			}

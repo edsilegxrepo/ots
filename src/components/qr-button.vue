@@ -21,7 +21,11 @@ import { defineComponent } from "vue";
 export default defineComponent({
 	computed: {
 		computedTitle(): string {
-			return this.title || (this.$t("tooltip-qr-code") as string) || "QR Code for secret URL";
+			return (
+				this.title ||
+				(this.$t("tooltip-qr-code") as string) ||
+				"QR Code for secret URL"
+			);
 		},
 
 		customize(): any {
@@ -38,7 +42,10 @@ export default defineComponent({
 	methods: {
 		fixTooltip(): void {
 			if (this.$refs.qrButton) {
-				(this.$refs.qrButton as HTMLElement).setAttribute("title", this.computedTitle);
+				(this.$refs.qrButton as HTMLElement).setAttribute(
+					"title",
+					this.computedTitle,
+				);
 			}
 		},
 
@@ -95,7 +102,10 @@ export default defineComponent({
 			});
 
 			if (this.$refs.qrButton) {
-				(this.$refs.qrButton as HTMLElement).setAttribute("title", this.computedTitle);
+				(this.$refs.qrButton as HTMLElement).setAttribute(
+					"title",
+					this.computedTitle,
+				);
 			}
 		},
 	},
