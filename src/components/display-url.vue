@@ -13,6 +13,7 @@
         :short-url="shortUrl"
         :secure-password="securePassword"
         :burn-time="burnTime"
+        :expires-at="expiresAt"
       />
     </div>
     <div
@@ -98,6 +99,23 @@ export default defineComponent({
 	components: { appClipboardButton, appMessageModalButton, appQrButton },
 
 	computed: {
+		burnTime(): string {
+			if (!this.expiresAt) return "";
+			try {
+				return this.expiresAt.toLocaleString(undefined, {
+					year: "numeric",
+					month: "numeric",
+					day: "numeric",
+					hour: "numeric",
+					minute: "2-digit",
+					second: "2-digit",
+					timeZoneName: "short",
+				});
+			} catch (_e) {
+				return this.expiresAt.toLocaleString();
+			}
+		},
+
 		secretUrl(): string {
 			return [
 				window.location.href.split("#")[0],

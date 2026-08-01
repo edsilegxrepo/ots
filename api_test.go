@@ -529,35 +529,52 @@ func TestProductionMaxAttachmentBoundaryE2E(t *testing.T) {
 
 func TestEnterpriseMessageTemplatesRendering(t *testing.T) {
 	secretID := "57a87bbd-fc58-4716-aa36-511d027a40aa"
+	shortID := "57a87bbd"
 	key := "zAuhdWvm96ugn3JsgU0m"
 	baseURL := "http://127.0.0.1:3000/"
 	fullURL := baseURL + "#" + secretID + "%7C" + key
 	shortURL := baseURL + "#" + secretID
 	expiry := "8/1/2026, 3:52:40 PM"
 
-	// 1. Full Link Template
+	// 1. Full Link ASCII Template with secretId Header & NOTE block
 	fullTpl := "===================================================================\n" +
-		"                  CONFIDENTIAL ONE-TIME SECRET\n" +
+		"             CONFIDENTIAL ONE-TIME SECRET [" + shortID + "]\n" +
 		"===================================================================\n\n" +
-		"Hello,\n\nA secure, encrypted one-time secret has been generated for you.\n\n" +
+		"NOTE: Secret expires on " + expiry + ".\n\n" +
 		"-------------------------------------------------------------------\nSECRET URL:\n" + fullURL + "\n" +
 		"-------------------------------------------------------------------\n\n" +
 		"IMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n" +
-		"   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n" +
-		"3. Expiration: " + expiry + " (if not viewed before).\n\n" +
+		"   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n\n" +
 		"==================================================================="
 
 	assert.Contains(t, fullTpl, fullURL)
-	assert.Contains(t, fullTpl, "CONFIDENTIAL ONE-TIME SECRET")
+	assert.Contains(t, fullTpl, "CONFIDENTIAL ONE-TIME SECRET ["+shortID+"]")
+	assert.Contains(t, fullTpl, "NOTE: Secret expires on "+expiry)
+	assert.NotContains(t, fullTpl, "Hello,")
 	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, fullTpl, "template must contain zero emojis")
 
-	// 2. Dual Link Part 1 Template
-	dualLinkTpl := "SECRET LINK (Without Decryption Key):\n" + shortURL
-	assert.Contains(t, dualLinkTpl, shortURL)
-	assert.NotContains(t, dualLinkTpl, key)
-	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, dualLinkTpl, "dual link template must contain zero emojis")
+	// 2. Dual Link Part 1 Markdown Template with [!WARNING] block
+	dualLinkMd := "### DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2) [" + shortID + "]\n\n" +
+		"> [!WARNING]\n> Secret expires on " + expiry + ".\n\n" +
+		"A secure, encrypted one-time secret has been created for you.\n" +
+		"> **SECRET LINK (Without Decryption Key):**\n> " + shortURL + "\n\n" +
+		"**INSTRUCTIONS:**\n1. Obtain the Decryption Key from your second communication channel.\n2. Accessing the link burns (deletes) the secret permanently."
 
-	// 3. Dual Key Part 2 Template
+	assert.Contains(t, dualLinkMd, shortURL)
+	assert.Contains(t, dualLinkMd, "DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2) ["+shortID+"]")
+	assert.Contains(t, dualLinkMd, "> [!WARNING]")
+	assert.NotContains(t, dualLinkMd, key)
+	assert.NotRegexp(t, `[\x{1F600}-\x{1F64F}\x{1F300}-\x{1F5FF}\x{1F680}-\x{1F6FF}\x{2600}-\x{26FF}\x{2700}-\x{27BF}]`, dualLinkMd, "dual link template must contain zero emojis")
+
+	// 3. Combined Chat JSON Payload Schema Validation (including burn_on_read & secret_id)
+	jsonPayload := `{"burn_on_read":true,"decryption_key":"` + key + `","expiration":"` + expiry + `","header":"DUAL-CHANNEL SECURE DELIVERY NOTICE [` + shortID + `]","secret_id":"` + shortID + `","short_url":"` + shortURL + `","type":"dual_channel_combined_notice"}`
+
+	assert.Contains(t, jsonPayload, `"burn_on_read":true`)
+	assert.Contains(t, jsonPayload, `"expiration":"`+expiry+`"`)
+	assert.Contains(t, jsonPayload, `"secret_id":"`+shortID+`"`)
+	assert.Contains(t, jsonPayload, `"decryption_key":"`+key+`"`)
+
+	// 4. Dual Key Part 2 Template
 	dualKeyTpl := "DECRYPTION KEY:\n" + key
 	assert.Contains(t, dualKeyTpl, key)
 	assert.NotContains(t, dualKeyTpl, shortURL)

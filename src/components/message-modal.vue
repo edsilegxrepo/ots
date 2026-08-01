@@ -162,7 +162,7 @@
                 <label
                   class="btn btn-outline-primary"
                   for="fmtJSON"
-                ><i class="fas fa-brackets-curly me-1" /> JSON</label>
+                ><i class="fas fa-file-code me-1" /> JSON</label>
               </div>
             </div>
 
@@ -292,12 +292,34 @@ export default defineComponent({
 	components: { AppClipboardButton },
 
 	computed: {
+		isoExpiration(): string {
+			if (this.expiresAt) {
+				return this.expiresAt.toISOString();
+			}
+			if (this.burnTime) {
+				return this.burnTime;
+			}
+			return "Configured retention policy";
+		},
+
+		secretId(): string {
+			const match = this.secretUrl.match(/#([a-f0-9-]+)/i);
+			return match ? match[1].substring(0, 8) : "ID";
+		},
+
 		combinedChatTemplate(): string {
+			const expNote = this.burnTime
+				? `Secret expires on ${this.burnTime}.`
+				: "Secret expires according to configured retention policy.";
+
 			if (this.selectedFormat === "json") {
 				return JSON.stringify(
 					{
 						burn_on_read: true,
 						decryption_key: this.securePassword,
+						expiration: this.isoExpiration,
+						header: `DUAL-CHANNEL SECURE DELIVERY NOTICE [${this.secretId}]`,
+						secret_id: this.secretId,
 						short_url: this.shortUrl,
 						type: "dual_channel_combined_notice",
 					},
@@ -308,7 +330,10 @@ export default defineComponent({
 
 			if (this.selectedFormat === "html") {
 				return `<div style="font-family: Arial, sans-serif; border: 1px solid #0dcaf0; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">
-  <h4 style="color: #055160; margin-top: 0;">DUAL-CHANNEL SECURE DELIVERY NOTICE</h4>
+  <h4 style="color: #055160; margin-top: 0;">DUAL-CHANNEL SECURE DELIVERY NOTICE [${this.secretId}]</h4>
+  <div style="background-color: #e7f1ff; border-left: 4px solid #0dcaf0; padding: 8px; margin-bottom: 10px; font-size: 13px;">
+    <strong>NOTE:</strong> ${expNote}
+  </div>
   <p style="margin-bottom: 5px;"><strong>Link (Channel 1):</strong> <a href="${this.shortUrl}">${this.shortUrl}</a></p>
   <p style="margin-bottom: 10px;"><strong>Key (Channel 2):</strong> <code>${this.securePassword}</code></p>
   <p style="font-size: 12px; color: #6c757d; margin: 0;">NOTICE: Opening the link decrypts and burns the secret immediately.</p>
@@ -316,19 +341,26 @@ export default defineComponent({
 			}
 
 			if (this.selectedFormat === "md") {
-				return `### DUAL-CHANNEL SECURE DELIVERY NOTICE\n\n- **Link (Channel 1):** ${this.shortUrl}\n- **Key  (Channel 2):** \`${this.securePassword}\` \n\n*NOTICE: Opening the link decrypts and burns the secret immediately.*`;
+				return `### DUAL-CHANNEL SECURE DELIVERY NOTICE [${this.secretId}]\n\n> [!WARNING]\n> ${expNote}\n\n- **Link (Channel 1):** ${this.shortUrl}\n- **Key  (Channel 2):** \`${this.securePassword}\` \n\n*NOTICE: Opening the link decrypts and burns the secret immediately.*`;
 			}
 
 			// Plain Text Default
-			return `\`\`\`\n===================================================================\n             DUAL-CHANNEL SECURE DELIVERY NOTICE\n===================================================================\n\n  Link (Channel 1): ${this.shortUrl}\n  Key  (Channel 2): ${this.securePassword}\n\nNOTICE: Opening the link decrypts and burns the secret immediately.\n===================================================================\n\`\`\``;
+			return `\`\`\`\n===================================================================\n       DUAL-CHANNEL SECURE DELIVERY NOTICE [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\n  Link (Channel 1): ${this.shortUrl}\n  Key  (Channel 2): ${this.securePassword}\n\nNOTICE: Opening the link decrypts and burns the secret immediately.\n===================================================================\n\`\`\``;
 		},
 
 		dualKeyTemplate(): string {
+			const expNote = this.burnTime
+				? `Secret expires on ${this.burnTime}.`
+				: "Secret expires according to configured retention policy.";
+
 			if (this.selectedFormat === "json") {
 				return JSON.stringify(
 					{
 						decryption_key: this.securePassword,
+						expiration: this.isoExpiration,
+						header: `DECRYPTION KEY TRANSMISSION [${this.secretId}]`,
 						instructions: "Paste this key when prompted after opening your secret link.",
+						secret_id: this.secretId,
 						type: "dual_channel_decryption_key",
 					},
 					null,
@@ -338,8 +370,10 @@ export default defineComponent({
 
 			if (this.selectedFormat === "html") {
 				return `<div style="font-family: Arial, sans-serif; border: 1px solid #ffc107; border-radius: 6px; padding: 15px; background-color: #fff3cd;">
-  <h3 style="color: #664d03; margin-top: 0;">DECRYPTION KEY TRANSMISSION (PART 2 OF 2)</h3>
-  <p>Hello,</p>
+  <h3 style="color: #664d03; margin-top: 0;">DECRYPTION KEY TRANSMISSION (PART 2 OF 2) [${this.secretId}]</h3>
+  <div style="background-color: #fff8e1; border-left: 4px solid #ffc107; padding: 8px; margin: 10px 0; font-size: 13px;">
+    <strong>NOTE:</strong> ${expNote}
+  </div>
   <p>Here is your decryption key for the secret link sent via email:</p>
   <div style="background: #ffffff; border: 1px solid #ffe69c; padding: 10px; font-family: monospace; font-size: 14px; margin: 10px 0;">
     <strong>DECRYPTION KEY:</strong><br>${this.securePassword}
@@ -349,36 +383,37 @@ export default defineComponent({
 			}
 
 			if (this.selectedFormat === "md") {
-				return `### DECRYPTION KEY TRANSMISSION (PART 2 OF 2)\n\nHello,\n\nHere is your decryption key for the secret link sent via email:\n\n> **DECRYPTION KEY:**\n> \`${this.securePassword}\` \n\n**INSTRUCTIONS:** Paste this key when prompted after opening your secret link.`;
+				return `### DECRYPTION KEY TRANSMISSION (PART 2 OF 2) [${this.secretId}]\n\n> [!WARNING]\n> ${expNote}\n\nHere is your decryption key for the secret link sent via email:\n\n> **DECRYPTION KEY:**\n> \`${this.securePassword}\` \n\n**INSTRUCTIONS:** Paste this key when prompted after opening your secret link.`;
 			}
 
 			// Plain Text Default
-			return `===================================================================\n            DECRYPTION KEY TRANSMISSION (PART 2 OF 2)\n===================================================================\n\nHello,\n\nHere is your decryption key for the secret link sent via email:\n\n-------------------------------------------------------------------\nDECRYPTION KEY:\n${this.securePassword}\n-------------------------------------------------------------------\n\nINSTRUCTIONS:\nPaste this key when prompted after opening your secret link.\n\n===================================================================`;
+			return `===================================================================\n      DECRYPTION KEY TRANSMISSION (PART 2 OF 2) [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\nHere is your decryption key for the secret link sent via email:\n\n-------------------------------------------------------------------\nDECRYPTION KEY:\n${this.securePassword}\n-------------------------------------------------------------------\n\nINSTRUCTIONS:\nPaste this key when prompted after opening your secret link.\n\n===================================================================`;
 		},
 
 		dualLinkTemplate(): string {
-			let expiryTxt = "";
-			if (this.burnTime) {
-				expiryTxt = `\n3. Expiration: ${this.burnTime}.`;
-			}
+			const expNote = this.burnTime
+				? `Secret expires on ${this.burnTime}.`
+				: "Secret expires according to configured retention policy.";
 
 			if (this.selectedFormat === "json") {
 				const obj: Record<string, unknown> = {
 					burn_on_read: true,
 					decryption_key_channel: "separate_channel_required",
+					expiration: this.isoExpiration,
+					header: `DUAL-CHANNEL SECRET TRANSMISSION [${this.secretId}]`,
+					secret_id: this.secretId,
 					short_url: this.shortUrl,
 					type: "dual_channel_secret_link",
 				};
-				if (this.burnTime) {
-					obj.expires_at = this.burnTime;
-				}
 				return JSON.stringify(obj, null, 2);
 			}
 
 			if (this.selectedFormat === "html") {
 				return `<div style="font-family: Arial, sans-serif; border: 1px solid #198754; border-radius: 6px; padding: 15px; background-color: #ffffff;">
-  <h3 style="color: #0f5132; margin-top: 0;">DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2)</h3>
-  <p>Hello,</p>
+  <h3 style="color: #0f5132; margin-top: 0;">DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2) [${this.secretId}]</h3>
+  <div style="background-color: #e8f5e9; border-left: 4px solid #198754; padding: 8px; margin: 10px 0; font-size: 13px;">
+    <strong>NOTE:</strong> ${expNote}
+  </div>
   <p>A secure, encrypted one-time secret has been created for you. For enhanced security, the decryption key is delivered via a separate channel (SMS, Slack, or Teams).</p>
   <div style="background-color: #f8f9fa; border-left: 4px solid #198754; padding: 10px; margin: 10px 0; word-break: break-all;">
     <strong>SECRET LINK (Without Decryption Key):</strong><br>
@@ -387,17 +422,17 @@ export default defineComponent({
   <p style="font-size: 13px; color: #6c757d;">
     <strong>INSTRUCTIONS:</strong><br>
     1. Obtain the Decryption Key from your second communication channel.<br>
-    2. Accessing the link burns (deletes) the secret permanently.${this.burnTime ? '<br>3. Expiration: ' + this.burnTime + '.' : ''}
+    2. Accessing the link burns (deletes) the secret permanently.
   </p>
 </div>`;
 			}
 
 			if (this.selectedFormat === "md") {
-				return `### DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2)\n\nHello,\n\nA secure, encrypted one-time secret has been created for you.\nFor enhanced security, the decryption key is delivered via a separate channel (SMS, Slack, or Teams).\n\n> **SECRET LINK (Without Decryption Key):**\n> ${this.shortUrl}\n\n**INSTRUCTIONS:**\n1. Obtain the Decryption Key from your second communication channel.\n2. Accessing the link burns (deletes) the secret permanently.${expiryTxt}`;
+				return `### DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2) [${this.secretId}]\n\n> [!WARNING]\n> ${expNote}\n\nA secure, encrypted one-time secret has been created for you.\nFor enhanced security, the decryption key is delivered via a separate channel (SMS, Slack, or Teams).\n\n> **SECRET LINK (Without Decryption Key):**\n> ${this.shortUrl}\n\n**INSTRUCTIONS:**\n1. Obtain the Decryption Key from your second communication channel.\n2. Accessing the link burns (deletes) the secret permanently.`;
 			}
 
 			// Plain Text Default
-			return `===================================================================\n            DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2)\n===================================================================\n\nHello,\n\nA secure, encrypted one-time secret has been created for you.\nFor enhanced security, the decryption key is delivered via a \nseparate channel (SMS, Slack, or Teams).\n\n-------------------------------------------------------------------\nSECRET LINK (Without Decryption Key):\n${this.shortUrl}\n-------------------------------------------------------------------\n\nINSTRUCTIONS:\n1. Obtain the Decryption Key from your second communication channel.\n2. Accessing the link burns (deletes) the secret permanently.${expiryTxt}\n\n===================================================================`;
+			return `===================================================================\n      DUAL-CHANNEL SECRET TRANSMISSION (PART 1 OF 2) [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\nA secure, encrypted one-time secret has been created for you.\nFor enhanced security, the decryption key is delivered via a \nseparate channel (SMS, Slack, or Teams).\n\n-------------------------------------------------------------------\nSECRET LINK (Without Decryption Key):\n${this.shortUrl}\n-------------------------------------------------------------------\n\nINSTRUCTIONS:\n1. Obtain the Decryption Key from your second communication channel.\n2. Accessing the link burns (deletes) the secret permanently.\n\n===================================================================`;
 		},
 
 		formatLabel(): string {
@@ -414,28 +449,29 @@ export default defineComponent({
 		},
 
 		fullLinkTemplate(): string {
-			let expiryTxt = "";
-			if (this.burnTime) {
-				expiryTxt = `\n3. Expiration: ${this.burnTime} (if not viewed before).`;
-			}
+			const expNote = this.burnTime
+				? `Secret expires on ${this.burnTime}.`
+				: "Secret expires according to configured retention policy.";
 
 			if (this.selectedFormat === "json") {
 				const obj: Record<string, unknown> = {
 					burn_on_read: true,
+					expiration: this.isoExpiration,
+					header: `CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]`,
 					instructions: "Accessing this URL decrypts the payload and PERMANENTLY BURNS (deletes) the secret from the server.",
+					secret_id: this.secretId,
 					secret_url: this.secretUrl,
 					type: "one_time_secret",
 				};
-				if (this.burnTime) {
-					obj.expires_at = this.burnTime;
-				}
 				return JSON.stringify(obj, null, 2);
 			}
 
 			if (this.selectedFormat === "html") {
 				return `<div style="font-family: Arial, sans-serif; border: 1px solid #198754; border-radius: 6px; padding: 15px; background-color: #ffffff;">
-  <h3 style="color: #0f5132; margin-top: 0;">CONFIDENTIAL ONE-TIME SECRET</h3>
-  <p>Hello,</p>
+  <h3 style="color: #0f5132; margin-top: 0;">CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]</h3>
+  <div style="background-color: #e8f5e9; border-left: 4px solid #198754; padding: 8px; margin: 10px 0; font-size: 13px;">
+    <strong>NOTE:</strong> ${expNote}
+  </div>
   <p>A secure, encrypted one-time secret has been generated for you.</p>
   <div style="background-color: #f8f9fa; border-left: 4px solid #198754; padding: 10px; margin: 10px 0; word-break: break-all;">
     <strong>SECRET URL:</strong><br>
@@ -444,17 +480,17 @@ export default defineComponent({
   <p style="font-size: 13px; color: #6c757d;">
     <strong>IMPORTANT INSTRUCTIONS:</strong><br>
     1. Accessing this URL decrypts the payload and <strong>PERMANENTLY BURNS (deletes)</strong> the secret.<br>
-    2. Please copy or store the content immediately upon opening.${this.burnTime ? '<br>3. Expiration: ' + this.burnTime + ' (if not viewed before).' : ''}
+    2. Please copy or store the content immediately upon opening.
   </p>
 </div>`;
 			}
 
 			if (this.selectedFormat === "md") {
-				return `### CONFIDENTIAL ONE-TIME SECRET\n\nHello,\n\nA secure, encrypted one-time secret has been generated for you.\n\n> **SECRET URL:**\n> ${this.secretUrl}\n\n**IMPORTANT INSTRUCTIONS:**\n1. Accessing this URL decrypts the payload and **PERMANENTLY BURNS (deletes)** the secret from the server.\n2. Please copy or store the content immediately upon opening.${expiryTxt}`;
+				return `### CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]\n\n> [!WARNING]\n> ${expNote}\n\nA secure, encrypted one-time secret has been generated for you.\n\n> **SECRET URL:**\n> ${this.secretUrl}\n\n**IMPORTANT INSTRUCTIONS:**\n1. Accessing this URL decrypts the payload and **PERMANENTLY BURNS (deletes)** the secret from the server.\n2. Please copy or store the content immediately upon opening.`;
 			}
 
 			// Plain Text Default
-			return `===================================================================\n                  CONFIDENTIAL ONE-TIME SECRET\n===================================================================\n\nHello,\n\nA secure, encrypted one-time secret has been generated for you.\n\n-------------------------------------------------------------------\nSECRET URL:\n${this.secretUrl}\n-------------------------------------------------------------------\n\nIMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.${expiryTxt}\n\n===================================================================`;
+			return `===================================================================\n             CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\nA secure, encrypted one-time secret has been generated for you.\n\n-------------------------------------------------------------------\nSECRET URL:\n${this.secretUrl}\n-------------------------------------------------------------------\n\nIMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n\n===================================================================`;
 		},
 	},
 
@@ -470,6 +506,11 @@ export default defineComponent({
 		burnTime: {
 			default: "",
 			type: String,
+		},
+		expiresAt: {
+			default: null,
+			required: false,
+			type: Date,
 		},
 		secretUrl: {
 			required: true,

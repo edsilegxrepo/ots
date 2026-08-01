@@ -16,7 +16,8 @@ The OTS Authentication Subsystem decouples **Identity Verification (Authenticati
 |                            DECOUPLING PRINCIPLE                                    |
 |                                                                                   |
 |  1. WHO IS CREATING THE SECRET?  ==>  Authentication & Authorization (AUTH.md)   |
-|     Verified via HTTP Basic, LDAP, OIDC (Okta), SAML, or Authelia.                 |
+|     Verified via HTTP Basic (local users.yaml) or ForwardAuth Proxy              |
+|     (Authelia, Authentik, OAuth2-Proxy, Pomerium, Okta).                         |
 |                                                                                   |
 |  2. WHAT IS INSIDE THE SECRET?   ==>  Zero-Knowledge Encryption (Client-Side)     |
 |     Encrypted in browser via AES-256-GCM before transport. Key in URL hash (#).   |
@@ -26,7 +27,7 @@ The OTS Authentication Subsystem decouples **Identity Verification (Authenticati
 ### Core Security Guarantees
 1. **Zero-Knowledge Isolation:** Authentication verifies caller identity on `POST /api/create`. The backend server never receives, parses, or decrypts secret payloads or decryption keys.
 2. **Endpoint-Specific Authorization:** `POST /api/create` is protected by the Authentication Pipeline. Secret redemption endpoints (`GET /secret`, `GET /api/get/:id`) remain public and anonymous to preserve frictionless one-time secret burning.
-3. **Dual Client Parity:** Native support for both **headless CLI/API clients** (`ots-cli`, `curl`, automated CI scripts) via HTTP Basic or Bearer JWTs, and **interactive web browsers** via OIDC/SAML SSO and HTTP-only session cookies.
+3. **Dual Client Parity:** Native support for both **headless CLI/API clients** (`ots-cli`, `curl`, automated CI scripts) via HTTP Basic or API headers, and **interactive web browsers** via ForwardAuth reverse proxies (Authelia, Authentik, Okta, Pomerium).
 
 ---
 
@@ -41,14 +42,11 @@ flowchart TD
 
     subgraph AuthPipeline["OTS Auth Pipeline (pkg/auth)"]
         Middleware["Auth Middleware"]
-        Evaluator["Sequential Provider Chain"]
+        Evaluator["Active Connector Selector"]
         
-        LocalAuth["Local Engine\n(iam.yaml / Argon2id)"]
+        LocalAuth["Local Engine\n(users.yaml / Argon2id)"]
         HTPasswdAuth["Apache HTPasswd\n(security.user.ots)"]
-        LDAPAuth["Multi-Server LDAP/AD\n(Bind / memberOf)"]
-        OIDCAuth["OIDC / Okta Provider\n(PKCE / JWKS Bearer)"]
-        ForwardAuth["Authelia ForwardAuth\n(Remote-User Headers)"]
-        SAMLAuth["SAML 2.0 Engine\n(SP Assertion)"]
+        ForwardAuth["ForwardAuth Proxy\n(Authelia / Authentik / Okta)"]
     end
 
     subgraph RBAC["Policy Engine (pkg/auth/rbac)"]
@@ -61,23 +59,17 @@ flowchart TD
         PublicAPI["GET /api/get/:id\n(Public Anonymous Endpoint)"]
     end
 
-    Browser -->|Session Cookie or OIDC Redirection| Middleware
-    Headless -->|Header: Basic or Bearer JWT| Middleware
+    Browser -->|ForwardAuth Proxy Session| Middleware
+    Headless -->|Header: Basic Auth or API Key| Middleware
 
     Middleware --> Evaluator
     Evaluator --> LocalAuth
     Evaluator --> HTPasswdAuth
-    Evaluator --> LDAPAuth
-    Evaluator --> OIDCAuth
     Evaluator --> ForwardAuth
-    Evaluator --> SAMLAuth
 
     LocalAuth --> Normalizer
     HTPasswdAuth --> Normalizer
-    LDAPAuth --> Normalizer
-    OIDCAuth --> Normalizer
     ForwardAuth --> Normalizer
-    SAMLAuth --> Normalizer
 
     Normalizer --> PolicyCheck
     PolicyCheck -->|Authorized| CreateAPI
@@ -166,23 +158,15 @@ users:
     disabled: false
     createdAt: "2026-07-31T15:40:00Z"
 
-  # 2. Federated Account Override (OIDC / Okta - No password hash needed)
+  # 2. Federated Account Override (ForwardAuth Proxy - No password hash needed)
   - username: "alice@example.com"
-    provider: "oidc"
+    provider: "forwardauth"
     email: "alice@example.com"
     groups:
       - "Admins"
       - "Security-Team"
     disabled: false
     createdAt: "2026-07-31T15:42:00Z"
-
-  # 3. Federated Account Override (LDAP - No password hash needed)
-  - username: "svcotsfdw08"
-    provider: "ldap"
-    groups:
-      - "OTS-Creators"
-    disabled: false
-    createdAt: "2026-07-31T15:43:00Z"
 ```
 
   # Connector Configurations (Only the active connector is loaded)
@@ -196,30 +180,7 @@ users:
       enabled: true
       file: "/etc/httpd/auth/security.user.ots"
 
-    # 3. Multi-Server LDAP / Active Directory
-    ldap:
-      enabled: true
-      servers:
-        - "ldaps://ldap1.example.com:636"
-        - "ldaps://ldap2.example.com:636"
-      baseDN: "ou=users,dc=example,dc=com"
-      userFilter: "(&(objectClass=user)(sAMAccountName=%s))"
-      groupAttribute: "memberOf"
-      bindDN: "cn=ots-svc,ou=services,dc=example,dc=com"
-      bindPassword: "env:LDAP_BIND_PASSWORD"
-
-    # 4. Okta / Enterprise OIDC Provider
-    oidc:
-      enabled: true
-      issuer: "https://example.okta.com/oauth2/default"
-      clientID: "0oaxxxxxxxxxx"
-      clientSecret: "env:OKTA_CLIENT_SECRET"
-      redirectURL: "https://ots.example.com/auth/callback"
-      scopes: ["openid", "profile", "email", "groups"]
-      groupsClaim: "groups"
-      bearerJWKSValidation: true
-
-    # 5. Authelia / ForwardAuth Proxy (Active in this example)
+    # 3. Authelia / ForwardAuth Proxy (Active in this example)
     forwardauth:
       enabled: true
       userHeader: "Remote-User"
@@ -315,7 +276,6 @@ Administrators manage local `iam.yaml` accounts via the `ots-cli user` command s
 # Default Workflow: Auto-Generates 32-character cryptographically secure password
 ots-cli user add \
   --username bob \
-  --provider local \
   --email bob@example.com \
   --groups "OTS-Creators,DevOps" \
   --users-file /etc/ots/users.yaml
@@ -339,7 +299,6 @@ ots-cli user add \
 # OTS NEVER sends emails or contacts external networks. The admin maintains 100% control of link distribution.
 ots-cli user add \
   --username bob \
-  --provider local \
   --email bob@example.com \
   --groups "OTS-Creators" \
   --create-ots-link
@@ -357,14 +316,13 @@ ots-cli user add \
 # Explicit Password Override via STDIN (for automation/scripts)
 echo "CustomSecretPass123!" | ots-cli user add \
   --username bob \
-  --provider local \
   --password-stdin \
   --groups "OTS-Creators"
 
 # Pre-provision Explicit Group Mappings for Federated Accounts (No password generated)
 ots-cli user add \
   --username alice@example.com \
-  --provider oidc \
+  --provider forwardauth \
   --groups "Admins,Security-Team" \
   --users-file /etc/ots/users.yaml
 ```
@@ -392,7 +350,95 @@ ots-cli user delete --username alice --iam-file /etc/ots/iam.yaml
 
 ---
 
-## 8. Security Threat Model & Mitigation Matrix
+## 8. Enterprise Integration Patterns (Authelia, Authentik, Okta, Pomerium, OAuth2-Proxy)
+
+### A. Architectural Principle: Generic ForwardAuth Header Trust
+
+The OTS Authentication Subsystem implements **Generic ForwardAuth Header Trust** via `pkg/auth/forwardauth`. This architectural decision delegates authentication complexity (SAML 2.0, OpenID Connect, WebAuthn Passkeys, YubiKey Hardware 2FA, Active Directory LDAP sync, and Risk-Based Adaptive MFA) to enterprise reverse proxy gateways.
+
+```
++-----------------------------------------------------------------------------------+
+|                        ENTERPRISE FORWARDAUTH PIPELINE                            |
+|                                                                                   |
+|  [Web Client / Script]                                                            |
+|          |                                                                        |
+|          v                                                                        |
+|  [Reverse Proxy Gateway]  <--->  [Identity Provider (IdP)]                        |
+|  (Authelia, Authentik,           (Okta, Azure AD, Keycloak,                       |
+|   OAuth2-Proxy, Pomerium)         Active Directory / LDAP)                        |
+|          |                                                                        |
+|          | Inject Authenticated HTTP Headers:                                     |
+|          |   Remote-User: alice@company.com                                       |
+|          |   Remote-Groups: Okta-DevOps,Okta-SecOps                               |
+|          v                                                                        |
+|  [OTS Engine (pkg/auth/forwardauth)]                                              |
+|  (Validates trustedProxies IP boundary & enforces iam.yaml RBAC policies)         |
++-----------------------------------------------------------------------------------+
+```
+
+### B. Okta + Authelia / OAuth2-Proxy Integration Pattern
+
+Organizations utilizing **Okta** alongside **Authelia** or **`oauth2-proxy`** achieve 100% zero-code enterprise integration:
+
+1. **LDAP & Active Directory Group Sync:** Okta syncs corporate LDAP/AD groups (e.g. `cn=DevOps,ou=Groups,dc=company,dc=com`) into Okta.
+2. **OIDC Group Claims Mapping:** Okta includes user group memberships in the OIDC ID Token `groups` claim array (`["Okta-DevOps", "Okta-SecOps"]`).
+3. **Proxy Header Injection:** Authelia or `oauth2-proxy` validates the Okta token and injects clean header strings:
+   * `Remote-User: alice@company.com`
+   * `Remote-Groups: Okta-DevOps,Okta-SecOps`
+4. **Zero LDAP Protocol Overhead:** OTS requires **zero direct LDAP queries**, **zero LDAP bind passwords**, and **zero LDAP firewall rules**. It reads `Remote-Groups` headers directly.
+
+### C. End-to-End Group & Role Mapping Reference (`iam.yaml`)
+
+Incoming Authelia/Okta group headers map directly to **OTS Feature Roles & Access Policies** in `iam.yaml`:
+
+```yaml
+iam:
+  enabled: true
+  connector: "forwardauth"
+
+  # ForwardAuth Header Extraction Rules
+  forwardauth:
+    enabled: true
+    userHeader: "Remote-User"        # Supports: X-Auth-Request-User, X-authentik-username
+    emailHeader: "Remote-Email"      # Supports: X-Auth-Request-Email
+    groupsHeader: "Remote-Groups"    # Supports: X-Auth-Request-Groups, X-authentik-groups
+    headerDelimiter: ","
+    trustedProxies:
+      - "127.0.0.1"
+      - "10.0.0.0/8"
+
+  # Granular RBAC Role Mapping Matrix
+  policy:
+    defaultPolicy: "deny"
+
+    # Base Role: Groups authorized to create One-Time Secrets
+    allowedGroups:
+      - "Okta-DevOps"
+      - "Okta-SecOps"
+      - "Engineering"
+
+    # Granular Feature Capability Roles
+    featurePolicies:
+      # High-Capacity Attachment Uploaders (up to 75 MiB payload capacity)
+      allowLargeAttachments:
+        allowedGroups:
+          - "Okta-DevOps"
+          - "Okta-SecOps"
+
+      # Custom Expiration Overrides (Can set custom retention schedules)
+      allowExpiryOverride:
+        allowedGroups:
+          - "Okta-SecOps"
+
+      # Custom Short URL / Vanity Slug Creators
+      allowCustomSlugs:
+        allowedGroups:
+          - "Okta-DevOps"
+```
+
+---
+
+## 9. Security Threat Model & Mitigation Matrix
 
 | Threat / Vector | Risk Level | Mitigation Strategy |
 | :--- | :--- | :--- |
@@ -427,67 +473,6 @@ ots-cli user delete --username alice --iam-file /etc/ots/iam.yaml
   * Unauthenticated endpoints: Rate limited by client IP (30 req/min).
   * Authenticated endpoints (`POST /api/create`): Rate limited by `UserIdentity.Username` to prevent a single compromised account from consuming total instance storage quota (`maxAttachmentSizeTotal`).
 
-### E. CLI `--create-ots-link` Authentication Authentication Loopback
+### E. CLI `--create-ots-link` Authentication Loopback
 * **Audit Finding:** How does `ots-cli user add --create-ots-link` authenticate to `/api/create` when creating Bob's onboarding link?
 * **Verdict: RESOLVED.** `ots-cli` can authenticate using `--admin-auth` flags, environment variables, or a loopback admin token generated at server startup.
-
----
-
-## 10. SecretProtector Integration Specification (`secretprotector`)
-
-To eliminate plaintext secrets (such as LDAP bind passwords, OIDC client secrets, session keys, and local user hashes) from disk and version control, OTS integrates directly with the private **`secretprotector`** cryptographic library (`e:\data\devel\build\code\private\secretprotector\`).
-
-### A. Architectural Integration Modes
-
-```mermaid
-flowchart LR
-    MasterKey["SECRETPROTECTOR_MASTER_KEY\n(Env Var / Key File / Stdin)"]
-    
-    subgraph Storage["On-Disk Encryption"]
-        EncFile["iam.yaml.enc / users.yaml.enc\n(Full AES-256-GCM File Encryption)"]
-        InlineSecret["bindPassword: 'ENC[base64_ciphertext]'\n(Inline Field Encryption)"]
-    end
-
-    subgraph OTSApp["OTS Server Startup"]
-        Init["initApp() / secretprotector.DecryptBytes()"]
-        MemConfig["Decrypted In-Memory Configuration"]
-    end
-
-    MasterKey --> Init
-    EncFile --> Init
-    InlineSecret --> Init
-    Init --> MemConfig
-```
-
-#### 1. Inline Field Encryption (`ENC[...]` Syntax)
-Sensitive values inside `iam.yaml` or `users.yaml` can be encrypted individually using `secretprotector`:
-```yaml
-iam:
-  connectors:
-    ldap:
-      bindDN: "cn=ots-svc,ou=services,dc=example,dc=com"
-      bindPassword: "ENC[v1:AES256GCM:a7b8c9d0...]" # Encrypted via secretprotector
-    oidc:
-      clientSecret: "ENC[v1:AES256GCM:f1e2d3c4...]" # Encrypted via secretprotector
-```
-
-#### 2. Full File Encryption (`iam.yaml.enc` / `users.yaml.enc`)
-The entire `iam.yaml` or `users.yaml` file can be stored as an authenticated AES-256-GCM ciphertext file (`iam.yaml.enc` / `users.yaml.enc`).
-
----
-
-### B. Master Key Resolution Hierarchy
-OTS resolves the `secretprotector` Master Key in the following strict precedence order:
-1. **CLI Flag (`--master-key-file <path>`)**
-2. **Environment Variable (`SECRETPROTECTOR_MASTER_KEY`)**
-3. **Key File (`/etc/ots/master.key` with strict `0400` / `0600` permissions)**
-
----
-
-### C. `ots-cli user` SecretProtector Integration
-When provisioned accounts are written to `users.yaml` (or `users.yaml.enc`), `ots-cli` utilizes `secretprotector.EncryptBytes()` to encrypt Argon2id hashes and sensitive fields before persisting to disk.
-
----
-
-### D. Memory Scrubbing Guarantee
-Immediately after `secretprotector` completes decryption during `initApp()`, all plaintext byte buffers are scrubbed from memory (`secretprotector.ZeroBuffer()`) to prevent lingering secret copies on the heap or garbage collector.

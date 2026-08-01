@@ -12,10 +12,10 @@
 #    ots_builder.sh [version-tag] [options]
 #
 #  Available Options:
+#    --platform <target>          Specify build targets: 'windows', 'linux', or 'windows,linux'.
 #    --auto-version               Derive build version automatically from git tag & commit hash.
 #    --update-deps, --upgrade-deps Upgrade Go modules, Node/Vue packages, & audit dependencies.
 #    --english-only               Purge non-English translations during compilation.
-#    --windows                    Compile target binaries for Windows amd64 (ots.exe & ots-cli.exe).
 #    --no-package                 Skip distribution tarball / zip archive packaging.
 #    --build-vendor               Vendor Go modules into vendor/ directory for offline audits.
 #    --validate                   Launch compiled binary on port 39999 and run live API tests.
@@ -23,8 +23,8 @@
 #    --auto-start                 Auto-launch persistent OTS background server daemon on 127.0.0.1:3000.
 #
 #  Usage Examples:
-#    bash ./tools/ots_builder.sh --auto-version --english-only --windows --validate --auto-start
-#    bash ./tools/ots_builder.sh --update-deps --validate
+#    bash ./tools/ots_builder.sh --auto-version --english-only --platform windows,linux --validate
+#    bash ./tools/ots_builder.sh --platform windows --auto-start
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -35,11 +35,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Normalize MSYS2 / Cygwin paths to drive:/path/sub format (e.g. E:/data/devel/build/code/public/ots)
+if command -v cygpath &>/dev/null; then
+  SCRIPT_DIR="$(cygpath -m "${SCRIPT_DIR}")"
+  ROOT_DIR="$(cygpath -m "${ROOT_DIR}")"
+fi
+
 # Sub-Step 1.2: Initialize Build Variables & Default Options
 BUILD_ID="ots"
 VERSION_ARG=""
 NO_PACKAGE=false
-BUILD_WINDOWS=false
+BUILD_LINUX=true
+BUILD_WINDOWS=true
+PLATFORM_EXPLICIT=false
 BUILD_VENDOR=false
 BUILD_ENGLISH_ONLY=false
 BUILD_AUTO_VERSION=false
@@ -49,6 +57,12 @@ AUTO_START=false
 UPDATE_DEPS=false
 OUTPUT_DIR="${ROOT_DIR}/testfiles/dist"
 BIN_DIR="${ROOT_DIR}/testfiles/bin"
+
+# Sub-Step 1.3: Pre-Flight Environment Validation
+if ! command -v go &>/dev/null; then
+  echo "ERROR: Go toolchain ('go') is not installed or not in PATH." >&2
+  exit 1
+fi
 
 # -----------------------------------------------------------------------------
 # Section 2: Cross-Platform Process Cleanup Helper
@@ -77,36 +91,103 @@ kill_running_ots_processes() {
 # Section 3: CLI Argument Parsing & Option Evaluation
 # -----------------------------------------------------------------------------
 # Sub-Step 3.1: Loop over Command Line Arguments
-for arg in "$@"; do
+while [ $# -gt 0 ]; do
+  arg="$1"
   # Sub-Step 3.2: Evaluate Flag Parameters & Enable Feature Switches
   case "$arg" in
+    --platform=*)
+      PLATFORM_VAL="${arg#*=}"
+      PLATFORM_EXPLICIT=true
+      case "${PLATFORM_VAL}" in
+        windows)
+          BUILD_WINDOWS=true
+          BUILD_LINUX=false
+          ;;
+        linux)
+          BUILD_LINUX=true
+          BUILD_WINDOWS=false
+          ;;
+        windows,linux|linux,windows|all|both)
+          BUILD_LINUX=true
+          BUILD_WINDOWS=true
+          ;;
+        *)
+          echo "Unknown platform: ${PLATFORM_VAL}. Allowed: windows, linux, windows,linux"
+          exit 1
+          ;;
+      esac
+      shift
+      ;;
+    --platform)
+      shift
+      PLATFORM_VAL="${1:-}"
+      PLATFORM_EXPLICIT=true
+      case "${PLATFORM_VAL}" in
+        windows)
+          BUILD_WINDOWS=true
+          BUILD_LINUX=false
+          ;;
+        linux)
+          BUILD_LINUX=true
+          BUILD_WINDOWS=false
+          ;;
+        windows,linux|linux,windows|all|both)
+          BUILD_LINUX=true
+          BUILD_WINDOWS=true
+          ;;
+        *)
+          echo "Unknown platform: ${PLATFORM_VAL}. Allowed: windows, linux, windows,linux"
+          exit 1
+          ;;
+      esac
+      shift
+      ;;
     --windows)
       BUILD_WINDOWS=true
+      if [ "${PLATFORM_EXPLICIT}" = "false" ]; then
+        BUILD_LINUX=true
+      fi
+      shift
+      ;;
+    --linux)
+      BUILD_LINUX=true
+      if [ "${PLATFORM_EXPLICIT}" = "false" ]; then
+        BUILD_WINDOWS=false
+      fi
+      shift
       ;;
     --no-package)
       NO_PACKAGE=true
+      shift
       ;;
     --build-vendor)
       BUILD_VENDOR=true
+      shift
       ;;
     --english-only)
       BUILD_ENGLISH_ONLY=true
+      shift
       ;;
     --auto-version)
       BUILD_AUTO_VERSION=true
+      shift
       ;;
     --validate)
       BUILD_VALIDATE=true
+      shift
       ;;
     --kill-running|--clean-processes)
       KILL_RUNNING=true
+      shift
       ;;
     --auto-start)
       AUTO_START=true
       KILL_RUNNING=true
+      shift
       ;;
     --update-deps|--upgrade-deps)
       UPDATE_DEPS=true
+      shift
       ;;
     -*)
       echo "Unknown flag: $arg"
@@ -116,6 +197,7 @@ for arg in "$@"; do
       if [ -z "${VERSION_ARG}" ]; then
         VERSION_ARG="$arg"
       fi
+      shift
       ;;
   esac
 done
@@ -256,20 +338,26 @@ build_binary() {
   echo "==> Compiling for ${target_os}/${target_arch}..."
   
   # Build main server binary with stripped symbols & version injection
-  GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
+  if ! GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
     go build -v -mod=readonly -trimpath \
     -ldflags "-s -w -X main.version=${VERSION}-${TAG}" \
-    -o "${output_server}" .
+    -o "${output_server}" .; then
+    echo "ERROR: Compilation of main server binary failed for ${target_os}/${target_arch}" >&2
+    exit 1
+  fi
 
   # Build standalone CLI binary
   if [ -d "cmd/ots-cli" ]; then
     (
       cd cmd/ots-cli
       output_cli_target="${output_cli}"
-      GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
+      if ! GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
         go build -v -mod=readonly -trimpath \
         -ldflags "-s -w -X main.version=${VERSION}-${TAG}" \
-        -o "${output_cli_target}" .
+        -o "${output_cli_target}" .; then
+        echo "ERROR: Compilation of CLI binary failed for ${target_os}/${target_arch}" >&2
+        exit 1
+      fi
     )
   fi
 }
@@ -278,7 +366,9 @@ build_binary() {
 # Section 9: Compilation Matrix (Linux & Windows Targets)
 # -----------------------------------------------------------------------------
 # Sub-Step 9.1: Compile Linux amd64 Server & CLI Binaries
-build_binary "linux" "amd64" ""
+if [ "${BUILD_LINUX}" = "true" ]; then
+  build_binary "linux" "amd64" ""
+fi
 
 # Sub-Step 9.2: Compile Windows amd64 Executables (ots.exe & ots-cli.exe)
 if [ "${BUILD_WINDOWS}" = "true" ]; then
@@ -302,21 +392,23 @@ if [ "${NO_PACKAGE}" = "false" ]; then
   echo "==> Packaging distribution archives..."
 
   # Sub-Step 10.1: Assemble Linux Staging Directory & Create .tar.gz Distribution Package
-  LINUX_STAGING="${OUTPUT_DIR}/ots-linux-staging"
-  rm -rf "${LINUX_STAGING}"
-  mkdir -p "${LINUX_STAGING}/etc/custom" "${LINUX_STAGING}/log" "${LINUX_STAGING}/systemd"
+  if [ "${BUILD_LINUX}" = "true" ]; then
+    LINUX_STAGING="${OUTPUT_DIR}/ots-linux-staging"
+    rm -rf "${LINUX_STAGING}"
+    mkdir -p "${LINUX_STAGING}/etc/custom" "${LINUX_STAGING}/log" "${LINUX_STAGING}/systemd"
 
-  cp -f "${BIN_DIR}/ots_linux_amd64" "${LINUX_STAGING}/ots" 2>/dev/null || true
-  cp -f "${BIN_DIR}/ots-cli_linux_amd64" "${LINUX_STAGING}/ots-cli" 2>/dev/null || true
-  [ -f "${SCRIPT_DIR}/ots-config.yaml" ] && cp -f "${SCRIPT_DIR}/ots-config.yaml" "${LINUX_STAGING}/etc/ots-config.yaml"
-  [ -f "${SCRIPT_DIR}/ots.sysconfig" ] && cp -f "${SCRIPT_DIR}/ots.sysconfig" "${LINUX_STAGING}/etc/ots.env"
-  [ -f "${SCRIPT_DIR}/ots.service" ] && cp -f "${SCRIPT_DIR}/ots.service" "${LINUX_STAGING}/systemd/ots.service"
-  echo "ots-${VERSION}-${TAG}-linux_amd64" > "${LINUX_STAGING}/etc/ots.version"
+    cp -f "${BIN_DIR}/ots_linux_amd64" "${LINUX_STAGING}/ots" 2>/dev/null || true
+    cp -f "${BIN_DIR}/ots-cli_linux_amd64" "${LINUX_STAGING}/ots-cli" 2>/dev/null || true
+    [ -f "${SCRIPT_DIR}/ots-config.yaml" ] && cp -f "${SCRIPT_DIR}/ots-config.yaml" "${LINUX_STAGING}/etc/ots-config.yaml"
+    [ -f "${SCRIPT_DIR}/ots.sysconfig" ] && cp -f "${SCRIPT_DIR}/ots.sysconfig" "${LINUX_STAGING}/etc/ots.env"
+    [ -f "${SCRIPT_DIR}/ots.service" ] && cp -f "${SCRIPT_DIR}/ots.service" "${LINUX_STAGING}/systemd/ots.service"
+    echo "ots-${VERSION}-${TAG}-linux_amd64" > "${LINUX_STAGING}/etc/ots.version"
 
-  LINUX_ARCHIVE="${OUTPUT_DIR}/ots-${VERSION}-${TAG}-linux_amd64.tar.gz"
-  (cd "${LINUX_STAGING}" && tar -czvf "${LINUX_ARCHIVE}" ./*)
-  rm -rf "${LINUX_STAGING}"
-  echo "    Linux Archive Created: ${LINUX_ARCHIVE}"
+    LINUX_ARCHIVE="${OUTPUT_DIR}/ots-${VERSION}-${TAG}-linux_amd64.tar.gz"
+    (cd "${LINUX_STAGING}" && tar -czvf "${LINUX_ARCHIVE}" ./*)
+    rm -rf "${LINUX_STAGING}"
+    echo "    Linux Archive Created: ${LINUX_ARCHIVE}"
+  fi
 
   # Sub-Step 10.2: Assemble Windows Staging Directory & Create .zip Distribution Package
   if [ "${BUILD_WINDOWS}" = "true" ]; then
@@ -355,6 +447,8 @@ if [ "${NO_PACKAGE}" = "false" ]; then
     tar -czvf "${VENDOR_ARCHIVE}" vendor/
     echo "    Vendor Archive Created: ${VENDOR_ARCHIVE}"
   fi
+else
+  echo "==> Skipping distribution packaging (--no-package enabled)."
 fi
 
 # -----------------------------------------------------------------------------
@@ -467,7 +561,9 @@ fi
 echo "================================================="
 echo " SUCCESS: OTS Build completed successfully!"
 echo " Binaries stored in: ${BIN_DIR}"
-echo " Packages stored in: ${OUTPUT_DIR}"
+if [ "${NO_PACKAGE}" = "false" ]; then
+  echo " Packages stored in: ${OUTPUT_DIR}"
+fi
 echo "================================================="
 
 # -----------------------------------------------------------------------------
