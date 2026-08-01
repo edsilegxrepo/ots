@@ -19,6 +19,13 @@ graph TD
         TLS["HTTPS / TLS 1.3 Termination"]
         Mux["Gorilla Mux HTTP Router<br/>(api.go / main.go)"]
         RateLimiter["Sliding Window IP Rate Limiter<br/>(ratelimit.go)"]
+        AuthMiddleware["Identity & RBAC Middleware<br/>(pkg/auth)"]
+    end
+
+    subgraph "Identity & Auth Subsystem (pkg/auth)"
+        ForwardAuth["ForwardAuth Proxy Connector<br/>(pkg/auth/forwardauth.go)"]
+        LocalArgon2["Local Argon2id Authenticator<br/>(pkg/auth/local.go)"]
+        RBACEvaluator["Group RBAC Policy Engine<br/>(pkg/auth/rbac.go)"]
     end
 
     subgraph "Core Engine Layer"
@@ -40,7 +47,12 @@ graph TD
 
     TLS --> Mux
     Mux --> RateLimiter
-    RateLimiter --> APIServer
+    RateLimiter --> AuthMiddleware
+    AuthMiddleware --> ForwardAuth
+    AuthMiddleware --> LocalArgon2
+    ForwardAuth --> RBACEvaluator
+    LocalArgon2 --> RBACEvaluator
+    RBACEvaluator -->|"Authorized"| APIServer
 
     APIServer --> CapEngine
     APIServer --> CustEngine
