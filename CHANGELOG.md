@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [v1.40.0] - 2026-08-01
+
+### Added
+- **Authentication & Authorization Subsystem (`pkg/auth`):**
+  - **ForwardAuth Reverse Proxy Connector (`pkg/auth/forwardauth.go`):** Implemented session header trust for Authelia, Authentik, OAuth2-Proxy, Pomerium, and Okta with anti-spoofing CIDR/IP validation (`trustedProxies`).
+  - **Local Argon2id Authenticator (`pkg/auth/local.go`):** Implemented OWASP-compliant Argon2id password hashing (`m=64MB, t=3, p=4`), base64 fallback decoding, atomic `.tmp` user file saving, `DeleteUser()` functionality, and automatic hot-reloading on disk changes (`users.yaml`).
+  - **Group-Based RBAC Policy Evaluator (`pkg/auth/rbac.go`):** Implemented group membership authorization (`allowedGroups`) on protected endpoints like `POST /api/create` with `path.Clean()` trailing slash traversal normalization.
+  - **HTTP Auth Middleware (`pkg/auth/middleware.go`):** Added authentication middleware returning standardized `401 Unauthorized` and `403 Forbidden` JSON error responses (`Content-Type: application/json; charset=utf-8`).
+  - **Identity Configuration Unmarshaler (`pkg/auth/identity.go`):** Added `LoadIAMConfig` supporting both top-level `iam:` YAML wrapper blocks and root schema structures (`iam.yaml`).
+- **Administrative CLI User Management Command Suite (`cmd/ots-cli/cmd_user.go`):**
+  - Added `ots-cli user add`, `list`, `disable`, and `delete` commands with onboarding credential template generation.
+- **Orchestration Suite Enhancements (`tools/ots_builder.sh`):**
+  - Added `--with-redis [<path>]` supporting optional binary path parameters, automatic `$PATH` prepending, `$REDIS_HOME` environment inspection, and clean exit aborts on missing binaries.
+  - Added background Redis server lifecycle orchestration (`start_redis_server`, `stop_redis_server`) for live API validation (`--validate`) on port `63799`.
+  - Added `-h` / `--help` CLI flag displaying interactive usage menu (`show_usage`).
+
+---
+
 ## [v1.31.0] - 2026-07-31
 
 ### Added

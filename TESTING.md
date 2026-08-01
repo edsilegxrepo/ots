@@ -101,11 +101,16 @@ sequenceDiagram
 
 | Logical Group | Test Name | Technical Purpose / Description | Success Criteria (Expected Result) |
 |---|---|---|---|
+| **Auth Pipeline** | `TestAuthForwardAuthHeaders` | Tests ForwardAuth reverse proxy header trust, IP verification, and identity extraction. | **PASS**: Trusted proxy headers return identity; untrusted header spoofing rejected. |
+| **Auth Pipeline** | `TestAuthLocalArgon2id` | Tests Argon2id password verification, atomic file saving, user deletion, base64 fallback, and hot-reloading. | **PASS**: Argon2id verification succeeds; `DeleteUser` removes entry atomically. |
+| **Auth Pipeline** | `TestAuthRBACEvaluator` | Tests group RBAC authorization and path normalization (`path.Clean()`) against `/api/create`. | **PASS**: Authorized groups pass; unauthorized or path-traversal attempts return 403 Forbidden. |
+| **CLI User Suite**| `TestCLIUserAddListDisableDelete` | Full E2E CLI testing of `ots-cli user add`, `list`, `disable`, and `delete` commands against `users.yaml`. | **PASS**: User account created, listed, disabled, and deleted cleanly. |
 | **Live E2E** | `TestLiveServerLargeAttachmentsE2E` | Verifies end-to-end 10MB binary attachment payload creation, HTTP transfer, and byte-for-byte decryption against live local OTS server. | **PASS**: 10MB attachment uploaded, fetched, and verified 100% intact. |
 | **Live E2E** | `TestLiveServerExtensionFilteringE2E` | Tests live extension filtering using group aliases (`@images`, `@office`) and blocked extensions (`.exe`). | **PASS**: Allowed extensions pass pre-flight; blocked extensions return `false`. |
 | **Live E2E** | `TestLiveServerDualChannelSplitKeyE2E` | Tests Issue #208 dual-channel delivery: splits URL into base URL `#secret_id` and key, decrypting via `FetchWithKey`. | **PASS**: Base URL without key fails; `FetchWithKey(baseURL, key)` decrypts and burns secret. |
 | **Live E2E** | `TestLiveServerConcurrencyAndAntiSpoofingE2E` | Spawns 20 parallel worker goroutines creating and fetching secrets simultaneously against live HTTP server. | **PASS**: All 20 parallel workers create and fetch secrets with 0 race conditions or deadlocks. |
 | **Live E2E** | `TestLiveServerSanitizedErrorResponsesE2E` | Verifies non-existent IDs and malformed JSON payloads return sanitized UUID error tracking IDs without stack leaks. | **PASS**: 404 and 400 responses return clean sanitized UUID error IDs. |
+| **Live Redis E2E**| `TestLiveRedisStorageValidation` | Validates live secret creation, atomic burn-after-read, and expiration against an orchestrated Redis server on port `63799` via `ots_builder.sh --validate --with-redis [<path>]`. | **PASS**: Secret stored in Redis hash key, retrieved, burned atomically, and verified deleted from Redis. |
 | **Listener Guard**| `TestListenerHardening` | Tests automatic hardening of default `:3000` to `127.0.0.1:3000` when TLS is disabled, while respecting custom `--listen`. | **PASS**: Default `:3000` hardens to `127.0.0.1:3000`; custom `--listen` is honored. |
 | **CLI E2E** | `TestCLICreateAndFetchE2E` | Full E2E CLI client secret creation and retrieval against live test HTTP server. | **PASS**: Secret created, URL formatted, fetched secret matches input, second fetch returns 404. |
 | **CLI E2E** | `TestCLIAttachmentCreationE2E` | Tests CLI attachment serialization with file content payload. | **PASS**: Attachment content, file name, and MIME type preserved. |
@@ -197,6 +202,16 @@ go test -cover ./...
 # Generate and inspect coverage report
 go test -coverprofile=c.out ./...
 go tool cover -func=c.out
+```
+
+### Running Build & Live Validation Suite with Redis Storage
+
+```bash
+# Run full cross-platform build and live API validation suite with Redis storage
+bash ./tools/ots_builder.sh --auto-version --validate --with-redis [<path>]
+
+# Example with explicit Windows Redis path:
+bash ./tools/ots_builder.sh --auto-version --english-only --platform windows,linux --no-package --validate --with-redis d:/inetd/redis
 ```
 
 ---

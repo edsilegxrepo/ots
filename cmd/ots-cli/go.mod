@@ -20,9 +20,8 @@ require (
 
 require (
 	github.com/Luzifer/go-openssl/v4 v4.2.5 // indirect
-	github.com/Luzifer/ots/pkg/customization v0.0.0-20260407120015-d6c630e9a5ea // indirect
+	github.com/Luzifer/ots/pkg/customization v0.0.0-20260730190941-cd111fc0ea74 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect

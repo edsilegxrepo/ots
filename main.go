@@ -24,6 +24,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 
+	"github.com/Luzifer/ots/pkg/auth"
 	"github.com/Luzifer/ots/pkg/customization"
 	"github.com/Luzifer/ots/pkg/metrics"
 )
@@ -44,6 +45,7 @@ var (
 		EnableTLS      bool   `flag:"enable-tls" default:"false" description:"Enable HTTPS/TLS"`
 		CertFile       string `flag:"cert-file" default:"" description:"Path to the TLS certificate file"`
 		KeyFile        string `flag:"key-file" default:"" description:"Path to the TLS private key file"`
+		IAMConfigFile  string `flag:"iam-config" default:"" description:"Path to iam.yaml configuration file"`
 	}
 
 	assets   filehelpers.FSStack
@@ -195,6 +197,31 @@ func main() {
 		Methods(http.MethodGet)
 
 	var hdl http.Handler = r
+
+	if cfg.IAMConfigFile != "" {
+		iamData, err := os.ReadFile(cfg.IAMConfigFile)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to read iam-config file '%s'", cfg.IAMConfigFile)
+		}
+		iamCfg, err := auth.LoadIAMConfig(iamData)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to parse iam-config YAML '%s'", cfg.IAMConfigFile)
+		}
+		localAuth, err := auth.NewLocalAuthenticator(iamCfg.UsersFilePath)
+		if err != nil {
+			logrus.WithError(err).Warnf("failed to load local users file '%s'", iamCfg.UsersFilePath)
+		}
+		authMW, err := auth.NewAuthMiddleware(iamCfg, localAuth)
+		if err != nil {
+			logrus.WithError(err).Fatalf("failed to initialize IAM auth middleware")
+		}
+		hdl = authMW.Handler(hdl)
+		logrus.WithFields(logrus.Fields{
+			"iam_config": cfg.IAMConfigFile,
+			"connector":  iamCfg.Connector,
+		}).Info("IAM Authentication middleware enabled")
+	}
+
 	hdl = httphelpers.GzipHandler(hdl)
 	if cfg.LogRequests {
 		hdl = httphelpers.NewHTTPLogHandlerWithLogger(hdl, logrus.StandardLogger())

@@ -12,18 +12,21 @@
 #    ots_builder.sh [version-tag] [options]
 #
 #  Available Options:
+#    -h, --help                   Display help & usage information and exit.
 #    --platform <target>          Specify build targets: 'windows', 'linux', or 'windows,linux'.
 #    --auto-version               Derive build version automatically from git tag & commit hash.
 #    --update-deps, --upgrade-deps Upgrade Go modules, Node/Vue packages, & audit dependencies.
 #    --english-only               Purge non-English translations during compilation.
 #    --no-package                 Skip distribution tarball / zip archive packaging.
 #    --build-vendor               Vendor Go modules into vendor/ directory for offline audits.
+#    --with-redis [<path>]        Enable Redis storage for live tests/daemons (optional <path> parameter).
 #    --validate                   Launch compiled binary on port 39999 and run live API tests.
-#    --kill-running               Terminate stale OTS server processes across Windows/Linux.
+#    --kill-running               Terminate stale OTS server & Redis daemon processes.
 #    --auto-start                 Auto-launch persistent OTS background server daemon on 127.0.0.1:3000.
 #
 #  Usage Examples:
 #    bash ./tools/ots_builder.sh --auto-version --english-only --platform windows,linux --validate
+#    bash ./tools/ots_builder.sh --auto-version --validate --with-redis d:/inetd/redis
 #    bash ./tools/ots_builder.sh --platform windows --auto-start
 # -----------------------------------------------------------------------------
 set -euo pipefail
@@ -35,7 +38,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Normalize MSYS2 / Cygwin paths to drive:/path/sub format (e.g. E:/data/devel/build/code/public/ots)
+# Normalize MSYS2 / Cygwin paths to drive:/path/sub format (e.g. e:/data/devel/build/code/public/ots)
 if command -v cygpath &>/dev/null; then
   SCRIPT_DIR="$(cygpath -m "${SCRIPT_DIR}")"
   ROOT_DIR="$(cygpath -m "${ROOT_DIR}")"
@@ -55,19 +58,144 @@ BUILD_VALIDATE=false
 KILL_RUNNING=false
 AUTO_START=false
 UPDATE_DEPS=false
+WITH_REDIS=false
+REDIS_ARG_PATH=""
+REDIS_BIN=""
+REDIS_HOME="${REDIS_HOME:-}"
 OUTPUT_DIR="${ROOT_DIR}/testfiles/dist"
 BIN_DIR="${ROOT_DIR}/testfiles/bin"
 
-# Sub-Step 1.3: Pre-Flight Environment Validation
+# Sub-Step 1.3: Render Help & Usage Information
+show_usage() {
+  cat <<'EOF'
+Enterprise Cross-Platform Build, Maintenance & Daemon Orchestration Suite
+
+Usage:
+  ots_builder.sh [version-tag] [options]
+
+Available Options:
+  -h, --help                    Display this help & usage information and exit.
+  --platform <target>           Specify build targets: 'windows', 'linux', or 'windows,linux'.
+  --windows                     Build target for Windows (amd64).
+  --linux                       Build target for Linux (amd64).
+  --auto-version                Derive build version automatically from git tag & commit hash.
+  --english-only                Purge non-English translations during compilation.
+  --no-package                  Skip distribution tarball / zip archive packaging.
+  --build-vendor                Vendor Go modules into vendor/ directory for offline audits.
+  --update-deps, --upgrade-deps Upgrade Go modules, Node/Vue packages, & audit dependencies.
+  --with-redis [<path>]         Enable Redis storage for live tests/daemons (optional <path> parameter).
+  --validate                    Launch compiled binary on port 39999 and run live API validation suite.
+  --kill-running                Terminate stale OTS server & Redis daemon processes.
+  --auto-start                  Auto-launch persistent OTS background server daemon on 127.0.0.1:3000.
+
+Usage Examples:
+  bash ./tools/ots_builder.sh --auto-version --english-only --platform windows,linux --validate
+  bash ./tools/ots_builder.sh --auto-version --validate --with-redis d:/inetd/redis
+  bash ./tools/ots_builder.sh --platform windows --auto-start
+EOF
+  exit 0
+}
+
+# Sub-Step 1.4: Resolve Redis Location Helper
+resolve_redis() {
+  if [ "${WITH_REDIS}" != "true" ]; then
+    return 0
+  fi
+
+  # 1. If <path> specified, add to PATH
+  if [ -n "${REDIS_ARG_PATH}" ]; then
+    local p="${REDIS_ARG_PATH}"
+    if command -v cygpath &>/dev/null; then
+      local u_path
+      u_path="$(cygpath -u "${p}")"
+      export PATH="${u_path}:${PATH}"
+    else
+      export PATH="${p}:${PATH}"
+    fi
+  fi
+
+  # 2. If redis found in path, set REDIS_HOME
+  local bin=""
+  if command -v redis-server &>/dev/null; then
+    bin="$(command -v redis-server)"
+  fi
+
+  if [ -n "${bin}" ]; then
+    if command -v cygpath &>/dev/null; then
+      bin="$(cygpath -m "${bin}")"
+    fi
+    REDIS_BIN="${bin}"
+    REDIS_HOME="$(dirname "${bin}")"
+    return 0
+  fi
+
+  # 3. If not, inspect for REDIS_HOME
+  if [ -n "${REDIS_HOME}" ]; then
+    local rh="${REDIS_HOME}"
+    if command -v cygpath &>/dev/null; then
+      rh="$(cygpath -m "${rh}")"
+    fi
+    if [ -f "${rh}/redis-server.exe" ]; then
+      REDIS_BIN="${rh}/redis-server.exe"
+      REDIS_HOME="${rh}"
+      return 0
+    elif [ -f "${rh}/redis-server" ]; then
+      REDIS_BIN="${rh}/redis-server"
+      REDIS_HOME="${rh}"
+      return 0
+    fi
+  fi
+
+  # 4. If not found, ABORT WITH ERROR
+  echo "ERROR: --with-redis specified, but redis-server executable was not found in PATH or REDIS_HOME." >&2
+  exit 1
+}
+
+# Sub-Step 1.4: Pre-Flight Environment Validation
 if ! command -v go &>/dev/null; then
   echo "ERROR: Go toolchain ('go') is not installed or not in PATH." >&2
   exit 1
 fi
 
 # -----------------------------------------------------------------------------
-# Section 2: Cross-Platform Process Cleanup Helper
-# Terminates stale OTS instances on Linux (pkill) and Windows (taskkill / PowerShell)
+# Section 2: Redis Server Control & Process Cleanup Helpers
 # -----------------------------------------------------------------------------
+stop_redis_server() {
+  echo "==> Stopping running Redis processes..."
+  if command -v pkill &>/dev/null; then
+    pkill -f "redis-server" 2>/dev/null || true
+  fi
+  if command -v taskkill &>/dev/null; then
+    taskkill /F /IM redis-server.exe 2>/dev/null || true
+  fi
+  if command -v powershell &>/dev/null; then
+    powershell -Command "Get-Process -Name redis-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue" 2>/dev/null || true
+  fi
+  sleep 1
+}
+
+start_redis_server() {
+  local port="${1:-6379}"
+  if [ -z "${REDIS_BIN}" ] || [ ! -f "${REDIS_BIN}" ]; then
+    echo "ERROR: Cannot start Redis server. redis-server binary not found." >&2
+    return 1
+  fi
+
+  echo "==> Starting Redis server (${REDIS_BIN}) on port ${port}..."
+  if command -v cygpath &>/dev/null; then
+    WIN_REDIS="$(cygpath -m "${REDIS_BIN}")"
+    if command -v powershell &>/dev/null; then
+      powershell -Command "Start-Process -FilePath '${WIN_REDIS}' -ArgumentList '--port', '${port}', '--daemonize', 'no' -WindowStyle Hidden" >/dev/null 2>&1 || true
+    else
+      "${WIN_REDIS}" --port "${port}" --daemonize no >/dev/null 2>&1 &
+    fi
+  else
+    nohup "${REDIS_BIN}" --port "${port}" --daemonize no >/dev/null 2>&1 &
+  fi
+  sleep 1
+  echo "    Redis server started on 127.0.0.1:${port}."
+}
+
 kill_running_ots_processes() {
   echo "==> Terminating any running OTS server processes..."
   # Sub-Step 2.1: Terminate Stale Server Processes via pkill (Linux/macOS)
@@ -189,6 +317,22 @@ while [ $# -gt 0 ]; do
       UPDATE_DEPS=true
       shift
       ;;
+    --with-redis=*)
+      WITH_REDIS=true
+      REDIS_ARG_PATH="${arg#*=}"
+      shift
+      ;;
+    --with-redis)
+      WITH_REDIS=true
+      shift
+      if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
+        REDIS_ARG_PATH="$1"
+        shift
+      fi
+      ;;
+    -h|--help)
+      show_usage
+      ;;
     -*)
       echo "Unknown flag: $arg"
       exit 1
@@ -202,10 +346,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Sub-Step 3.3: Execute Pre-Build Process Cleanup (If Requested)
+# Sub-Step 3.3: Execute Pre-Build Process Cleanup & Redis Location Verification
 if [ "${KILL_RUNNING}" = "true" ]; then
   kill_running_ots_processes
+  stop_redis_server
 fi
+
+resolve_redis
 
 # -----------------------------------------------------------------------------
 # Section 4: Version Tag Resolution & Release Header Display
@@ -550,7 +697,48 @@ if [ "${BUILD_VALIDATE}" = "true" ]; then
     exit 1
   fi
 
-  # Sub-Step 11.6: Shutdown Test Server & Report Validation Status
+  # Sub-Step 11.6: Run Redis Live Storage Validation if Redis is enabled
+  if [ "${WITH_REDIS}" = "true" ] || [ -n "${REDIS_BIN}" ]; then
+    echo "==> Running Live API Validation with REDIS storage..."
+    REDIS_PORT="63799"
+    
+    start_redis_server "${REDIS_PORT}"
+
+    # Shut down Memory test server & wait for port socket cleanup
+    kill ${SERVER_PID} 2>/dev/null || true
+    sleep 1.5
+
+    echo "    Starting compiled binary (${SERVER_BIN}) on ${TEST_LISTEN} (Storage: REDIS)..."
+    REDIS_URL="redis://127.0.0.1:${REDIS_PORT}/0" "${SERVER_BIN}" --listen "${TEST_LISTEN}" --storage-type redis --log-level warn &
+    SERVER_PID=$!
+
+    REDIS_READY=false
+    for _ in {1..10}; do
+      if curl -s "${TEST_URL}/healthz" &>/dev/null; then
+        REDIS_READY=true
+        break
+      fi
+      sleep 0.5
+    done
+
+    if [ "${REDIS_READY}" = "true" ]; then
+      echo "    5. Testing Redis Secret Creation & Burn..."
+      REDIS_CREATE_RESP="$(curl -sSf -X POST -H "Content-Type: application/json" -d '{"secret":"Redis Validation Payload"}' "${TEST_URL}/create")"
+      REDIS_SECRET_ID="$(echo "${REDIS_CREATE_RESP}" | sed -n 's/.*"secret_id":"\([^"]*\)".*/\1/p')"
+      if [ -n "${REDIS_SECRET_ID}" ]; then
+        REDIS_GET="$(curl -sSf "${TEST_URL}/get/${REDIS_SECRET_ID}")"
+        if [[ "${REDIS_GET}" == *"Redis Validation Payload"* ]]; then
+          echo "    Redis Storage Validation PASSED 100%!"
+        fi
+      fi
+    else
+      echo "    WARNING: Redis test server failed to respond on port ${REDIS_PORT}"
+    fi
+
+    stop_redis_server
+  fi
+
+  # Sub-Step 11.7: Shutdown Test Server & Report Validation Status
   echo "    Shutting down test server (PID ${SERVER_PID})..."
   kill ${SERVER_PID} 2>/dev/null || true
   trap - EXIT
@@ -573,6 +761,14 @@ echo "================================================="
 if [ "${AUTO_START}" = "true" ]; then
   # Sub-Step 12.1: Terminate Stale Instances & Prepare Logging Directory (testfiles/logs)
   kill_running_ots_processes
+  
+  USE_REDIS_DAEMON=false
+  if [ "${WITH_REDIS}" = "true" ] || [ -n "${REDIS_BIN}" ]; then
+    USE_REDIS_DAEMON=true
+    stop_redis_server
+    start_redis_server 6379
+  fi
+
   CUSTOM_CFG="${ROOT_DIR}/testfiles/config.yml"
   LOG_DIR="${ROOT_DIR}/testfiles/logs"
   mkdir -p "${LOG_DIR}"
@@ -580,15 +776,27 @@ if [ "${AUTO_START}" = "true" ]; then
 
   echo "==> Auto-starting OTS server on http://127.0.0.1:3000/ (Logs: ${LOG_FILE}) ..."
 
+  if [ "${USE_REDIS_DAEMON}" = "true" ]; then
+    export REDIS_URL="redis://127.0.0.1:6379/0"
+  fi
+
   # Sub-Step 12.2: Launch Detached Windows Background Process via PowerShell Start-Process
   if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && command -v cygpath &>/dev/null; then
     EXEC_PATH="$(cygpath -m "${BIN_DIR}/ots_windows_amd64.exe")"
     CFG_PATH="$(cygpath -m "${CUSTOM_CFG}")"
     WIN_LOG_PATH="$(cygpath -m "${LOG_FILE}")"
-    powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
+    if [ "${USE_REDIS_DAEMON}" = "true" ]; then
+      powershell -Command "\$env:REDIS_URL='redis://127.0.0.1:6379/0'; Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--storage-type', 'redis', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
+    else
+      powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" >/dev/null 2>&1 || true
+    fi
   # Sub-Step 12.3: Launch Detached Linux Background Process via nohup
   elif [ -f "${BIN_DIR}/ots_linux_amd64" ]; then
-    nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &
+    if [ "${USE_REDIS_DAEMON}" = "true" ]; then
+      REDIS_URL="redis://127.0.0.1:6379/0" nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --storage-type redis --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &
+    else
+      nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" >/dev/null 2>&1 &
+    fi
   fi
 
   echo "    Server auto-started successfully (PID: $!)."

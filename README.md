@@ -34,6 +34,15 @@ For a better setup you can choose the backend which is used to store the secrets
 To shorten the README this documentation has been moved to the Wiki:
 https://github.com/Luzifer/ots/wiki/Customization
 
+### Authentication & Authorization
+
+OTS supports enterprise Identity & Access Management (IAM) decoupled from zero-knowledge secret cryptography:
+
+- **ForwardAuth Proxy:** Authenticate callers via Authelia, Authentik, OAuth2-Proxy, Pomerium, or Okta (`connector: forwardauth`).
+- **Local Argon2id Directory:** Authenticate callers via HTTP Basic Auth against OWASP-compliant Argon2id hashes in `users.yaml` (`connector: local`).
+- **Group-Based RBAC:** Enforce `allowedGroups` policies on protected endpoints like `POST /api/create`.
+- **Complete Specification:** See [AUTH.md](AUTH.md) for full architecture and YAML schemas.
+
 ## Creating secrets through CLI / scripts
 
 As `ots` is designed to never let the server know the secret you are sharing you should not just send the plain secret to it though it is possible.
@@ -68,6 +77,24 @@ In case your instance needs credentials to use the `/api/create` endpoint you ca
 - `ots-cli create --instance ... -H 'Authorization: Token abcde'` for token-auth (you can set any header you need, just repeat `-H ...`)
 
 When using a custom instance as your default, you can export the instance in the `OTS_INSTANCE` environment variable instead of passing the `--instance` parameter every time.
+
+#### User Directory Provisioning (`ots-cli user`)
+
+Administrators can manage local user accounts in `users.yaml` directly through `ots-cli user`:
+
+```console
+# Provision user with auto-generated password & Argon2id hash
+ots-cli user add --username alice --groups DevOps,SecOps --users-file /etc/ots/users.yaml
+
+# List user records and active status
+ots-cli user list --users-file /etc/ots/users.yaml
+
+# Disable a user account
+ots-cli user disable --username alice --users-file /etc/ots/users.yaml
+
+# Delete a user account atomically
+ots-cli user delete --username alice --users-file /etc/ots/users.yaml
+```
 
 ### Bash: Sharing an encrypted secret (strongly recommended!)
 

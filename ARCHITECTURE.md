@@ -107,8 +107,10 @@ sequenceDiagram
 - **`main.go`**: Parses CLI flags, configures loggers, sets up CORS middleware, embeds static web assets, and launches HTTP server listeners.
 - **`api.go` (`APIServer`)**: Orchestrates `/api/create`, `/api/get/{id}`, `/api/settings`, `/healthz`, and `/isWritable`.
 - **`ratelimit.go` (`ipRateLimiter`)**: Thread-safe sliding window rate limiter tracking request timestamps per client IP.
+- **`pkg/auth`**: Decoupled Identity & Access Management subsystem providing `ForwardAuth` proxy header trust, `Local` Argon2id password verification (`users.yaml`), and `RBAC` policy evaluation (`allowedGroups`).
 - **`pkg/customization` (`Customize`)**: Resolves operator settings, default expiry choices, and expands group extension aliases (`@images`, `@office`, `@archives`, `@packages`, `@binaries`).
 - **`pkg/client` (`client.go`)**: Client SDK providing programmatic `Create`, `Fetch`, `FetchWithKey`, and `SplitSecretURL` methods.
+- **`cmd/ots-cli`**: CLI client providing secret creation/fetching and `ots-cli user` user directory management (`add`, `list`, `disable`, `delete`).
 
 ---
 

@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Luzifer/ots/pkg/auth"
 	"github.com/Luzifer/ots/pkg/client"
 	"github.com/Luzifer/ots/pkg/customization"
 	"github.com/Luzifer/ots/pkg/metrics"
@@ -604,4 +605,73 @@ func TestSecretBundlePayloadAssembly(t *testing.T) {
 	assert.Equal(t, "config.json", sec.Attachments[0].Name)
 	assert.Equal(t, "setup.sh", sec.Attachments[1].Name)
 	assert.Contains(t, string(sec.Attachments[0].Content), "127.0.0.1")
+}
+
+func TestForwardAuthIntegrationE2E(t *testing.T) {
+	cfg := auth.ForwardAuthConfig{
+		Enabled:         true,
+		UserHeader:      "Remote-User",
+		EmailHeader:     "Remote-Email",
+		GroupsHeader:    "Remote-Groups",
+		HeaderDelimiter: ",",
+		TrustedProxies:  []string{"127.0.0.1"},
+	}
+
+	am, err := auth.NewAuthMiddleware(auth.IAMConfig{
+		Enabled:   true,
+		Connector: "forwardauth",
+		Policy: auth.IAMPolicy{
+			AllowedGroups: []string{"DevOps", "SecOps"},
+		},
+		Connectors: auth.IAMConnectors{
+			ForwardAuth: cfg,
+		},
+	}, nil)
+	require.NoError(t, err)
+
+	handler := am.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity := auth.GetUserIdentity(r)
+		w.WriteHeader(http.StatusOK)
+		if identity != nil {
+			_, _ = w.Write([]byte("Authorized:" + identity.Username))
+		} else {
+			_, _ = w.Write([]byte("AnonymousPublic"))
+		}
+	}))
+
+	t.Run("Authorized ForwardAuth Call", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/create", nil)
+		req.RemoteAddr = "127.0.0.1:4000"
+		req.Header.Set("Remote-User", "alice@company.com")
+		req.Header.Set("Remote-Groups", "DevOps,Engineering")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "Authorized:alice@company.com", rr.Body.String())
+	})
+
+	t.Run("Unauthorized Group Rejection", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/api/create", nil)
+		req.RemoteAddr = "127.0.0.1:4000"
+		req.Header.Set("Remote-User", "guest@company.com")
+		req.Header.Set("Remote-Groups", "Guests")
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusForbidden, rr.Code)
+	})
+
+	t.Run("Public Secret Redemption Bypasses Auth", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/get/57a87bbd-fc58-4716-aa36-511d027a40aa", nil)
+		req.RemoteAddr = "203.0.113.10:1234" // Anonymous recipient IP
+
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "AnonymousPublic", rr.Body.String())
+	})
 }
