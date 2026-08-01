@@ -15,6 +15,7 @@ This document outlines the selected GitHub issues and repository improvements pl
 | **Phase 2** | **Security / Ops**| **Server-Side API Protection** *(Single Binary)* | Rate limiting per IP, server-side payload & extension validation in Go |
 | **Phase 2** | **Security / Ops**| Issue #234 (Storage Cap) | Configurable total attachment disk usage limit for DoS prevention |
 | **Phase 2** | **Security** | Issue #208 (Dual-Channel Delivery)| Split secret URL and decryption key for separate channel transmission |
+| **Phase 3** | **Auth / Testing**| **Authelia ForwardAuth Live Suite** | Live test integration of Authelia daemon on port 9091 via `--with-authelia [<path>]` |
 
 ---
 
@@ -169,6 +170,18 @@ This document outlines the selected GitHub issues and repository improvements pl
 ### 6. Metric Typo & Package Minimization (`pkg/metrics/metrics.go`, `api.go`)
 - **Finding:** Misspelled metric name constant `meticsSecretsReadErrors` in `pkg/metrics/metrics.go`.
 - **Remediation:** Corrected metric name to `metricsSecretsReadErrors`. Consolidated API constructor functions.
+
+---
+
+## Phase 3 Integration Roadmap
+
+### 7. Authelia ForwardAuth Live Test Orchestration (`tools/ots_builder.sh`)
+- **Planned Specification:**
+  - **CLI Flag:** Add `--with-authelia [<path>]` flag supporting optional binary location.
+  - **Binary Resolution (`resolve_authelia`):** Resolve `authelia` / `authelia.exe` via explicit argument, `$PATH`, or `$AUTHELIA_HOME`.
+  - **Automated Lifecycle (`start_authelia_server` / `stop_authelia_server`):** Launch Authelia on test port `9091` with test configuration (`testfiles/config/authelia/`).
+  - **Live ForwardAuth E2E Validation:** Verify OTS server running `connector: forwardauth` validates proxy session headers (`Remote-User`, `Remote-Groups`, `Remote-Email`) and enforces `allowedGroups` RBAC policies against live Authelia responses.
+
 
 
 
