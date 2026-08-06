@@ -47,16 +47,16 @@ func mustMergeOverwrite(srcs ...map[string]any) (out map[string]any) {
 	return out
 }
 
-func mustToJSON(v any) (string, error) {
+func mustToJSON(v any) (template.JS, error) {
 	output, err := json.Marshal(v)
 	if err != nil {
 		return "", fmt.Errorf("marshalling data: %w", err)
 	}
-	return string(output), nil
+	return template.JS(output), nil
 }
 
-func replace(oldSubstr, newSubstr, src string) string {
-	return strings.ReplaceAll(src, oldSubstr, newSubstr)
+func replace(oldSubstr, newSubstr string, src any) string {
+	return strings.ReplaceAll(strval(src), oldSubstr, newSubstr)
 }
 
 func strval(v any) string {

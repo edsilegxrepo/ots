@@ -38,11 +38,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Normalize MSYS2 / Cygwin paths to drive:/path/sub format (e.g. e:/data/devel/build/code/public/ots)
+# Normalize MSYS2 / Cygwin paths upfront across mixed (Windows native) and POSIX formats
+OUTPUT_DIR="${ROOT_DIR}/testfiles/dist"
+BIN_DIR="${ROOT_DIR}/testfiles/bin"
+OUTPUT_DIR_POSIX="${OUTPUT_DIR}"
+
 if command -v cygpath &> /dev/null; then
   SCRIPT_DIR="$(cygpath -m "${SCRIPT_DIR}")"
   ROOT_DIR="$(cygpath -m "${ROOT_DIR}")"
+  OUTPUT_DIR="$(cygpath -m "${OUTPUT_DIR}")"
+  BIN_DIR="$(cygpath -m "${BIN_DIR}")"
+  OUTPUT_DIR_POSIX="$(cygpath -u "${OUTPUT_DIR}")"
 fi
+cd "${ROOT_DIR}" || { echo "ERROR: Failed to change directory to project root ${ROOT_DIR}" >&2; exit 1; }
 
 # Sub-Step 1.2: Initialize Build Variables & Default Options
 BUILD_ID="ots"
@@ -62,8 +70,6 @@ WITH_REDIS=false
 REDIS_ARG_PATH=""
 REDIS_BIN=""
 REDIS_HOME="${REDIS_HOME:-}"
-OUTPUT_DIR="${ROOT_DIR}/testfiles/dist"
-BIN_DIR="${ROOT_DIR}/testfiles/bin"
 
 # Sub-Step 1.3: Render Help & Usage Information
 show_usage() {
@@ -272,16 +278,14 @@ while [ $# -gt 0 ]; do
       ;;
     --windows)
       BUILD_WINDOWS=true
-      if [ "${PLATFORM_EXPLICIT}" = "false" ]; then
-        BUILD_LINUX=true
-      fi
+      BUILD_LINUX=false
+      PLATFORM_EXPLICIT=true
       shift
       ;;
     --linux)
       BUILD_LINUX=true
-      if [ "${PLATFORM_EXPLICIT}" = "false" ]; then
-        BUILD_WINDOWS=false
-      fi
+      BUILD_WINDOWS=false
+      PLATFORM_EXPLICIT=true
       shift
       ;;
     --no-package)
@@ -388,16 +392,23 @@ if [ "${UPDATE_DEPS}" = "true" ]; then
   echo "================================================================="
   echo " ==> RUNNING FULL DEPENDENCY MAINTENANCE (--update-deps)"
   echo "================================================================="
-  # Sub-Step 5.1: Upgrade Go Modules & Tidy Dependencies
-  echo "1. Upgrading Go modules..."
-  go get -u ./...
-  go mod tidy
-  go mod verify
+  # Sub-Step 5.1: Upgrade Go Modules & Tidy Dependencies across all workspace modules
+  echo "1. Upgrading Go modules across workspace..."
+  find . -name "go.mod" -not -path "*/vendor/*" | while read -r modfile; do
+    moddir="$(dirname "${modfile}")"
+    echo "   -> Maintenance on module: ${moddir}"
+    (
+      cd "${moddir}"
+      go get -u ./... 2> /dev/null || true
+      go mod tidy
+      go mod verify
+    )
+  done
 
   # Sub-Step 5.2: Upgrade Node.js & Vue Packages via Package Manager (pnpm / npm)
   echo "2. Upgrading Node.js / Vue packages via pnpm..."
   if command -v pnpm &> /dev/null; then
-    pnpm update --latest
+    pnpm update
   elif command -v npm &> /dev/null; then
     npm update
   fi
@@ -430,7 +441,7 @@ if [ -d "ci/translate" ]; then
   if ! (cd ci/translate && go build -o translate_tool main.go 2> /dev/null); then
     (cd ci/translate && go build -o translate_tool)
   fi
-  ./ci/translate/translate_tool || true
+  ./ci/translate/translate_tool || { echo "ERROR: i18n translation generation failed" >&2; exit 1; }
   rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2> /dev/null || true
 fi
 
@@ -465,10 +476,16 @@ fi
 # -----------------------------------------------------------------------------
 # Section 8: Go Module Verification & Workspace Setup
 # -----------------------------------------------------------------------------
-# Sub-Step 8.1: Verify & Tidy Go Modules
-echo "==> Verifying Go module dependencies..."
-go mod tidy
-go mod verify
+# Sub-Step 8.1: Verify & Tidy All Go Modules Across Workspace
+echo "==> Verifying Go module dependencies across workspace..."
+find . -name "go.mod" -not -path "*/vendor/*" | while read -r modfile; do
+  moddir="$(dirname "${modfile}")"
+  (
+    cd "${moddir}"
+    go mod tidy
+    go mod verify
+  )
+done
 
 # Sub-Step 8.2: Ensure Output Directories Exist (testfiles/bin & testfiles/dist)
 mkdir -p "${BIN_DIR}"
@@ -497,11 +514,10 @@ build_binary() {
   if [ -d "cmd/ots-cli" ]; then
     (
       cd cmd/ots-cli
-      output_cli_target="${output_cli}"
       if ! GOOS="${target_os}" GOARCH="${target_arch}" CGO_ENABLED=0 \
         go build -v -mod=readonly -trimpath \
         -ldflags "-s -w -X main.version=${VERSION}-${TAG}" \
-        -o "${output_cli_target}" .; then
+        -o "${output_cli}" .; then
         echo "ERROR: Compilation of CLI binary failed for ${target_os}/${target_arch}" >&2
         exit 1
       fi
@@ -552,7 +568,8 @@ if [ "${NO_PACKAGE}" = "false" ]; then
     echo "ots-${VERSION}-${TAG}-linux_amd64" > "${LINUX_STAGING}/etc/ots.version"
 
     LINUX_ARCHIVE="${OUTPUT_DIR}/ots-${VERSION}-${TAG}-linux_amd64.tar.gz"
-    (cd "${LINUX_STAGING}" && tar -czvf "${LINUX_ARCHIVE}" ./*)
+    TAR_OUT="${OUTPUT_DIR_POSIX}/ots-${VERSION}-${TAG}-linux_amd64.tar.gz"
+    (cd "${LINUX_STAGING}" && tar -czvf "${TAR_OUT}" ./*)
     rm -rf "${LINUX_STAGING}"
     echo "    Linux Archive Created: ${LINUX_ARCHIVE}"
   fi
@@ -769,35 +786,73 @@ if [ "${AUTO_START}" = "true" ]; then
     start_redis_server 6379
   fi
 
-  CUSTOM_CFG="${ROOT_DIR}/testfiles/config.yml"
+  # Resolve custom configuration file if present
+  CUSTOM_CFG=""
+  for cfg_candidate in \
+    "${ROOT_DIR}/testfiles/config.yml" \
+    "${ROOT_DIR}/testfiles/config.yaml" \
+    "${ROOT_DIR}/testdata/config.yml" \
+    "${ROOT_DIR}/testdata/config.yaml" \
+    "${ROOT_DIR}/config.yml" \
+    "${ROOT_DIR}/config.yaml"; do
+    if [ -f "${cfg_candidate}" ]; then
+      CUSTOM_CFG="${cfg_candidate}"
+      break
+    fi
+  done
+
   LOG_DIR="${ROOT_DIR}/testfiles/logs"
   mkdir -p "${LOG_DIR}"
   LOG_FILE="${LOG_DIR}/ots.log"
 
   echo "==> Auto-starting OTS server on http://127.0.0.1:3000/ (Logs: ${LOG_FILE}) ..."
+  if [ -n "${CUSTOM_CFG}" ]; then
+    echo "    Using configuration file: ${CUSTOM_CFG}"
+  fi
 
   if [ "${USE_REDIS_DAEMON}" = "true" ]; then
     export REDIS_URL="redis://127.0.0.1:6379/0"
   fi
 
+  STARTED_PID=""
+
   # Sub-Step 12.2: Launch Detached Windows Background Process via PowerShell Start-Process
   if [ -f "${BIN_DIR}/ots_windows_amd64.exe" ] && command -v cygpath &> /dev/null; then
     EXEC_PATH="$(cygpath -m "${BIN_DIR}/ots_windows_amd64.exe")"
-    CFG_PATH="$(cygpath -m "${CUSTOM_CFG}")"
     WIN_LOG_PATH="$(cygpath -m "${LOG_FILE}")"
+
+    ARG_STR="--listen 127.0.0.1:3000 --log-file-path \"${WIN_LOG_PATH}\""
+    if [ -n "${CUSTOM_CFG}" ]; then
+      CFG_PATH="$(cygpath -m "${CUSTOM_CFG}")"
+      ARG_STR="${ARG_STR} --customize \"${CFG_PATH}\""
+    fi
     if [ "${USE_REDIS_DAEMON}" = "true" ]; then
-      powershell -Command "\$env:REDIS_URL='redis://127.0.0.1:6379/0'; Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--storage-type', 'redis', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" > /dev/null 2>&1 || true
+      ARG_STR="${ARG_STR} --storage-type redis"
+    fi
+
+    if [ "${USE_REDIS_DAEMON}" = "true" ]; then
+      STARTED_PID="$(powershell -Command "\$env:REDIS_URL='redis://127.0.0.1:6379/0'; \$p = Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '${ARG_STR}' -PassThru -WindowStyle Hidden; \$p.Id" 2> /dev/null | tr -d '\r\n')" || true
     else
-      powershell -Command "Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '--listen', '127.0.0.1:3000', '--customize', '${CFG_PATH}', '--log-file-path', '${WIN_LOG_PATH}' -WindowStyle Hidden" > /dev/null 2>&1 || true
+      STARTED_PID="$(powershell -Command "\$p = Start-Process -FilePath '${EXEC_PATH}' -ArgumentList '${ARG_STR}' -PassThru -WindowStyle Hidden; \$p.Id" 2> /dev/null | tr -d '\r\n')" || true
+    fi
+
+    # Fallback to ps -W if PassThru was empty
+    if [ -z "${STARTED_PID}" ] && command -v ps &> /dev/null; then
+      STARTED_PID="$(ps -W 2> /dev/null | grep -i "ots_windows_amd64\.exe" | awk '{print $4}' | head -n 1)" || true
     fi
   # Sub-Step 12.3: Launch Detached Linux Background Process via nohup
   elif [ -f "${BIN_DIR}/ots_linux_amd64" ]; then
-    if [ "${USE_REDIS_DAEMON}" = "true" ]; then
-      REDIS_URL="redis://127.0.0.1:6379/0" nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --storage-type redis --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
-    else
-      nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 --customize "${CUSTOM_CFG}" --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
+    CFG_PARAMS=()
+    if [ -n "${CUSTOM_CFG}" ]; then
+      CFG_PARAMS=("--customize" "${CUSTOM_CFG}")
     fi
+    if [ "${USE_REDIS_DAEMON}" = "true" ]; then
+      REDIS_URL="redis://127.0.0.1:6379/0" nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 "${CFG_PARAMS[@]}" --storage-type redis --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
+    else
+      nohup "${BIN_DIR}/ots_linux_amd64" --listen 127.0.0.1:3000 "${CFG_PARAMS[@]}" --log-file-path "${LOG_FILE}" > /dev/null 2>&1 &
+    fi
+    STARTED_PID=$!
   fi
 
-  echo "    Server auto-started successfully (PID: $!)."
+  echo "    Server auto-started successfully (PID: ${STARTED_PID:-detached})."
 fi

@@ -14,16 +14,16 @@ require (
 	github.com/Luzifer/go_helpers/file v0.6.2
 	github.com/Luzifer/go_helpers/http v0.12.5
 	github.com/Luzifer/ots/pkg/client v0.0.0-00010101000000-000000000000
-	github.com/Luzifer/ots/pkg/customization v0.0.0-20260730190941-cd111fc0ea74
-	github.com/Luzifer/ots/pkg/tplfunc v0.0.0-20260730190941-cd111fc0ea74
+	github.com/Luzifer/ots/pkg/customization v0.0.0-20260806231054-72d901945284
+	github.com/Luzifer/ots/pkg/tplfunc v0.0.0-20260806231054-72d901945284
 	github.com/Luzifer/rconfig/v2 v2.6.2
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.24.1
-	github.com/redis/go-redis/v9 v9.21.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.53.0
+	golang.org/x/crypto v0.54.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
