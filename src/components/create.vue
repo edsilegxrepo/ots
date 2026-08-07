@@ -73,8 +73,22 @@
             :accept="acceptedTypesPattern"
             @change="handleSelectFiles"
           >
-          <div class="form-text">
-            {{ $t('text-max-filesize', { maxSize: bytesToHuman(maxFileSize) }) }}
+          <div class="form-text mt-1">
+            <span class="me-2">{{ $t('text-max-filesize', { maxSize: bytesToHuman(maxFileSize) }) }}</span>
+            <template v-if="supportedExtensionsList.length > 0">
+              <span class="text-muted me-2">•</span>
+              <span class="fw-semibold text-secondary me-1">{{ $t('label-supported-extensions') }}</span>
+              <span class="d-inline-flex flex-wrap gap-1 align-items-center">
+                <span
+                  v-for="ext in supportedExtensionsList"
+                  :key="ext"
+                  class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle font-monospace py-1 px-2 me-1"
+                  style="font-size: 0.75rem;"
+                >
+                  {{ ext }}
+                </span>
+              </span>
+            </template>
           </div>
           <div
             v-if="invalidFilesSelected"
@@ -471,6 +485,22 @@ export default defineComponent({
 				return (this.customize as any).resolvedAcceptedExtensions.join(",");
 			}
 			return this.customize.acceptedFileTypes || "";
+		},
+
+		supportedExtensionsList(): string[] {
+			if (
+				Array.isArray((this.customize as any).resolvedAcceptedExtensions) &&
+				(this.customize as any).resolvedAcceptedExtensions.length > 0
+			) {
+				return (this.customize as any).resolvedAcceptedExtensions;
+			}
+			if (this.customize && this.customize.acceptedFileTypes) {
+				return this.customize.acceptedFileTypes
+					.split(",")
+					.map((s: string) => s.trim())
+					.filter(Boolean);
+			}
+			return [];
 		},
 	},
 

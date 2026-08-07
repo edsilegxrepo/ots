@@ -52,6 +52,7 @@ reference:
     text-hint-burned: '<strong>Attention:</strong> The secret is only displayed once. As soon as the page refreshes, the secret is gone; so please copy it now.'
     text-invalid-files-selected: 'At least one of the selected files is not allowed as an attachment.'
     text-max-filesize: 'Maximum size: {maxSize}'
+    label-supported-extensions: 'Supported extensions:'
     text-max-filesize-exceeded: 'The file(s) selected are too big to attach: {curSize} / {maxSize}'
     text-powered-by: 'Powered by'
     text-pre-reveal-hint: 'To reveal the secret, click on the button below; but be aware that doing so will destroy the secret. You can only view it once.'
