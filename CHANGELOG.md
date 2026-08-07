@@ -3,6 +3,22 @@
 All notable changes to **OTS (One-Time Secrets)** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.41.0] - 2026-08-06
+
+### Added
+- **Sender Context Message Subsystem (`src/ots-meta.js`, `src/components/create.vue`, `src/components/secret-display.vue`):**
+  - **Zero-Knowledge Encapsulation (`src/ots-meta.js`):** Extended `OTSMeta` serialization format to encapsulate optional context messages (up to 200 characters) and format specifiers (`text`, `md`, `html`, `json`), keeping all note content encrypted client-side via WebCrypto AES-256-GCM before server posting while preserving backward compatibility for legacy secret payloads.
+  - **Sender Modal & Format Selector (`src/components/create.vue`):** Added `[ + Add a Message ]` / `[ ✓ Message Attached ]` header action button opening a format selector modal (`Plain Text`, `Markdown`, `HTML`, `JSON`), live character counter with visual warning thresholds (`0 / 200`), and interactive `[ 🪄 Sample Template ]` starter templates.
+  - **Unmodified Template Auto-Discard (`src/components/create.vue`):** Added automatic detection in `saveMessageModal` to discard unedited default starter templates or empty note inputs upon saving, preventing accidental template attachment.
+  - **In-Modal Clear Note (`src/components/create.vue`):** `[ Clear Note ]` resets textarea input content while remaining active inside the modal dialog.
+  - **Recipient Display Container (`src/components/secret-display.vue`):** Added `[ ✉️ Message Received ]` header badge and `Sender Context Note` display card featuring format pill badge, monospaced text rendering, parsed Markdown/HTML container, and dedicated `[ Copy note to clipboard ]` button.
+  - **ZIP Bundle Integration (`src/components/secret-display.vue`):** Updated `downloadBundle()` to automatically package context notes (`note.txt`, `note.md`, `note.html`, or `note.json`) inside generated `.zip` bundle archives alongside `secret.txt`, attachments, and `SHA256SUMS`.
+
+### Security
+- **Dual-Sided DOMPurify XSS Protection (`src/components/create.vue` & `src/components/secret-display.vue`):**
+  - Integrated `dompurify` (v3.4.13) security library on both sender creation (`saveMessageModal`) and recipient rendering (`secret-display.vue`) for complete defense-in-depth against Stored XSS attacks.
+  - Enforced strict zero-active-content policy: automatically purges `<script>`, `<iframe>`, `<object>`, `<embed>`, `<style>`, `<form>`, `<svg>`, inline event handlers (`onload=`, `onerror=`, `onclick=`), style expressions, and dangerous URI schemes (`javascript:`, `data:`, `vbscript:`).
+
 ---
 
 ## [v1.40.0] - 2026-08-01
