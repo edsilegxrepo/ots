@@ -1,4 +1,4 @@
-﻿package sqlite
+package sqlite
 
 import (
 	"testing"
@@ -61,5 +61,19 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 
 	// Read 4 returns ErrSecretNotFound
 	_, _, err = store.ReadAndDestroy(id2)
+	assert.Equal(t, storage.ErrSecretNotFound, err)
+}
+
+func TestSQLiteExpiration(t *testing.T) {
+	store, err := New("sqlite://:memory:")
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	id, err := store.Create("expired_secret", time.Second, 1)
+	require.NoError(t, err)
+
+	time.Sleep(1500 * time.Millisecond)
+
+	_, _, err = store.ReadAndDestroy(id)
 	assert.Equal(t, storage.ErrSecretNotFound, err)
 }

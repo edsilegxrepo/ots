@@ -781,3 +781,23 @@ func TestAPICreateFileExtensionFiltering(t *testing.T) {
 	api.handleCreate(resOk, reqOk)
 	assert.Equal(t, http.StatusCreated, resOk.Code)
 }
+
+func TestExtractOTSAttachedFilenames(t *testing.T) {
+	// Plain text secret (non-OTS)
+	assert.Nil(t, extractOTSAttachedFilenames("regular secret text"))
+
+	// Malformed base64 OTS payload
+	assert.Nil(t, extractOTSAttachedFilenames("OTS1invalidbase64!!!"))
+
+	// Malformed JSON OTS payload
+	assert.Nil(t, extractOTSAttachedFilenames("OTS1"+base64.StdEncoding.EncodeToString([]byte("invalid json"))))
+
+	// Valid OTS payload with 2 attachments
+	metaJSON := `{"files":[{"name":"contract.pdf","size":500},{"name":"archive.zip","size":1200}],"secret":"encrypted_content"}`
+	validOTS := "OTS1" + base64.StdEncoding.EncodeToString([]byte(metaJSON))
+
+	filenames := extractOTSAttachedFilenames(validOTS)
+	require.Len(t, filenames, 2)
+	assert.Equal(t, "contract.pdf", filenames[0])
+	assert.Equal(t, "archive.zip", filenames[1])
+}

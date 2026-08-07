@@ -1,4 +1,4 @@
-﻿// Package sqlite implements the OTS storage.Storage interface for a pure Go CGO-free SQLite backend
+// Package sqlite implements the OTS storage.Storage interface for a pure Go CGO-free SQLite backend
 package sqlite
 
 import (
@@ -165,7 +165,7 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 	}
 
 	// Check expiration
-	if expiresAt > 0 && expiresAt < now {
+	if expiresAt > 0 && expiresAt <= now {
 		_, _ = tx.ExecContext(ctx, "DELETE FROM secrets WHERE id = ?;", id)
 		_ = tx.Commit()
 		return "", 0, storage.ErrSecretNotFound

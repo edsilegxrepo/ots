@@ -1,4 +1,4 @@
-﻿package badger
+package badger
 
 import (
 	"testing"
@@ -61,5 +61,19 @@ func TestBadgerStorageInterfaceContract(t *testing.T) {
 
 	// Read 4 returns ErrSecretNotFound
 	_, _, err = store.ReadAndDestroy(id2)
+	assert.Equal(t, storage.ErrSecretNotFound, err)
+}
+
+func TestBadgerExpiration(t *testing.T) {
+	store, err := New("badger://:memory:")
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	id, err := store.Create("expired_badger_secret", time.Second, 1)
+	require.NoError(t, err)
+
+	time.Sleep(1200 * time.Millisecond)
+
+	_, _, err = store.ReadAndDestroy(id)
 	assert.Equal(t, storage.ErrSecretNotFound, err)
 }
