@@ -183,7 +183,7 @@ func TestHandleReadAndDestroy(t *testing.T) {
 	api, store := newTestAPI(t)
 
 	// Create secret
-	id, err := store.Create("secret_content", time.Hour)
+	id, err := store.Create("secret_content", time.Hour, 1)
 	require.NoError(t, err)
 
 	// Read secret
@@ -682,4 +682,63 @@ func TestForwardAuthIntegrationE2E(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rr.Code)
 		assert.Equal(t, "AnonymousPublic", rr.Body.String())
 	})
+}
+
+func TestSecretReusabilityMultiRead(t *testing.T) {
+	api, _ := newTestAPI(t)
+	cust.MaxSecretReads = 3
+	cust.DisableReusabilityOverride = false
+
+	// Create secret with 3 allowed reads
+	reqBody := `{"secret":"multi_read_secret_payload","reads":3}`
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	api.handleCreate(res, req)
+	require.Equal(t, http.StatusCreated, res.Code)
+
+	var createResp apiResponse
+	require.NoError(t, json.NewDecoder(res.Body).Decode(&createResp))
+	assert.True(t, createResp.Success)
+	assert.Equal(t, 3, createResp.ReadsRemaining)
+	secretID := createResp.SecretID
+
+	// Read 1 (should leave 2 remaining)
+	readReq1 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/get/"+secretID, nil)
+	readReq1 = mux.SetURLVars(readReq1, map[string]string{"id": secretID})
+	res1 := httptest.NewRecorder()
+	api.handleRead(res1, readReq1)
+	require.Equal(t, http.StatusOK, res1.Code)
+	var readResp1 apiResponse
+	require.NoError(t, json.NewDecoder(res1.Body).Decode(&readResp1))
+	assert.Equal(t, "multi_read_secret_payload", readResp1.Secret)
+	assert.Equal(t, 2, readResp1.ReadsRemaining)
+
+	// Read 2 (should leave 1 remaining)
+	readReq2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/get/"+secretID, nil)
+	readReq2 = mux.SetURLVars(readReq2, map[string]string{"id": secretID})
+	res2 := httptest.NewRecorder()
+	api.handleRead(res2, readReq2)
+	require.Equal(t, http.StatusOK, res2.Code)
+	var readResp2 apiResponse
+	require.NoError(t, json.NewDecoder(res2.Body).Decode(&readResp2))
+	assert.Equal(t, 1, readResp2.ReadsRemaining)
+
+	// Read 3 (should reach 0 remaining)
+	readReq3 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/get/"+secretID, nil)
+	readReq3 = mux.SetURLVars(readReq3, map[string]string{"id": secretID})
+	res3 := httptest.NewRecorder()
+	api.handleRead(res3, readReq3)
+	require.Equal(t, http.StatusOK, res3.Code)
+	var readResp3 apiResponse
+	require.NoError(t, json.NewDecoder(res3.Body).Decode(&readResp3))
+	assert.Equal(t, 0, readResp3.ReadsRemaining)
+
+	// Read 4 (should return 404 secret not found)
+	readReq4 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/get/"+secretID, nil)
+	readReq4 = mux.SetURLVars(readReq4, map[string]string{"id": secretID})
+	res4 := httptest.NewRecorder()
+	api.handleRead(res4, readReq4)
+	require.Equal(t, http.StatusNotFound, res4.Code)
 }

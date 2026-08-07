@@ -3,6 +3,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -20,9 +21,50 @@ const (
 	redisScanCount     = 10
 )
 
-type storageRedis struct {
-	conn *redis.Client
-}
+type (
+	storageRedis struct {
+		conn *redis.Client
+	}
+
+	redisPayload struct {
+		Secret         string `json:"secret"`
+		ReadsRemaining int    `json:"reads_remaining"`
+	}
+)
+
+var luaReadAndDestroy = redis.NewScript(`
+local key = KEYS[1]
+local data = redis.call("GET", key)
+if not data then
+    return nil
+end
+
+local secret = data
+local reads_remaining = 0
+
+if string.sub(data, 1, 1) == "{" then
+    local ok, secretObj = pcall(cjson.decode, data)
+    if ok and secretObj and secretObj.secret then
+        secret = secretObj.secret
+        reads_remaining = (secretObj.reads_remaining or 1) - 1
+    end
+end
+
+if reads_remaining <= 0 then
+    redis.call("DEL", key)
+else
+    local secretObj = cjson.decode(data)
+    secretObj.reads_remaining = reads_remaining
+    local ttl = redis.call("TTL", key)
+    if ttl > 0 then
+        redis.call("SET", key, cjson.encode(secretObj), "EX", ttl)
+    else
+        redis.call("SET", key, cjson.encode(secretObj))
+    end
+end
+
+return { secret, reads_remaining }
+`)
 
 // New returns a new Redis backed storage
 func New() (storage.Storage, error) {
@@ -67,9 +109,21 @@ func (s storageRedis) Count() (n int64, err error) {
 	return n, nil
 }
 
-func (s storageRedis) Create(secret string, expireIn time.Duration) (string, error) {
+func (s storageRedis) Create(secret string, expireIn time.Duration, reads int) (string, error) {
+	if reads <= 0 {
+		reads = 1
+	}
+
 	id := uuid.Must(uuid.NewV4()).String()
-	err := s.conn.Set(context.Background(), s.redisKey(id), secret, expireIn).Err()
+	payload, err := json.Marshal(redisPayload{
+		Secret:         secret,
+		ReadsRemaining: reads,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshalling redis payload: %w", err)
+	}
+
+	err = s.conn.Set(context.Background(), s.redisKey(id), string(payload), expireIn).Err()
 	if err != nil {
 		return "", fmt.Errorf("writing redis key: %w", err)
 	}
@@ -77,16 +131,24 @@ func (s storageRedis) Create(secret string, expireIn time.Duration) (string, err
 	return id, nil
 }
 
-func (s storageRedis) ReadAndDestroy(id string) (string, error) {
-	secret, err := s.conn.GetDel(context.Background(), s.redisKey(id)).Result()
+func (s storageRedis) ReadAndDestroy(id string) (string, int, error) {
+	res, err := luaReadAndDestroy.Run(context.Background(), s.conn, []string{s.redisKey(id)}).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return "", storage.ErrSecretNotFound
+			return "", 0, storage.ErrSecretNotFound
 		}
-		return "", fmt.Errorf("getting and deleting key: %w", err)
+		return "", 0, fmt.Errorf("getting and updating redis key: %w", err)
 	}
 
-	return secret, nil
+	arr, ok := res.([]any)
+	if !ok || len(arr) < 2 {
+		return "", 0, storage.ErrSecretNotFound
+	}
+
+	secStr, _ := arr[0].(string)
+	readsRem, _ := arr[1].(int64)
+
+	return secStr, int(readsRem), nil
 }
 
 func (storageRedis) redisKey(id string) string {

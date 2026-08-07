@@ -81,9 +81,13 @@
           <p v-html="$t('text-attached-files')" />
           <FilesDisplay :files="files" />
         </template>
+        <div v-if="readsRemaining > 0" class="alert alert-info mt-3 shadow-sm" role="alert">
+          <i class="fas fa-circle-info me-2" />
+          {{ $t('text-reads-remaining-info', { count: readsRemaining }) }}
+        </div>
         <!-- Safe: Trusted internal translation string from i18n.yaml -->
         <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-        <p v-html="$t('text-hint-burned')" />
+        <p v-else v-html="$t('text-hint-burned')" />
       </template>
     </div>
   </div>
@@ -117,6 +121,7 @@ export default defineComponent({
 			inputPassword: "",
 			isGeneratingBundle: false,
 			popover: null,
+			readsRemaining: 0,
 			secret: null as null | string,
 			secretContentBlobURL: null as null | string,
 			secretLoading: false,
@@ -228,6 +233,7 @@ export default defineComponent({
 					}
 
 					resp.json().then((data) => {
+						this.readsRemaining = data.reads_remaining || 0;
 						const secret = data.secret;
 						if (!keyToUse) {
 							this.secret = secret;

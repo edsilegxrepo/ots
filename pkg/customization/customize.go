@@ -47,8 +47,10 @@ type (
 		DisableSearchIndex   *bool  `json:"disableSearchIndex,omitempty" yaml:"disableSearchIndex"`
 		DisableThemeSwitcher bool   `json:"disableThemeSwitcher,omitempty" yaml:"disableThemeSwitcher"`
 
-		DisableExpiryOverride bool    `json:"disableExpiryOverride,omitempty" yaml:"disableExpiryOverride"`
-		ExpiryChoices         []int64 `json:"expiryChoices,omitempty" yaml:"expiryChoices"`
+		DisableExpiryOverride      bool    `json:"disableExpiryOverride,omitempty" yaml:"disableExpiryOverride"`
+		DisableReusabilityOverride bool    `json:"disableReusabilityOverride,omitempty" yaml:"disableReusabilityOverride"`
+		ExpiryChoices              []int64 `json:"expiryChoices,omitempty" yaml:"expiryChoices"`
+		MaxSecretReads             int     `json:"maxSecretReads,omitempty" yaml:"maxSecretReads"`
 
 		AcceptedFileTypes          string   `json:"acceptedFileTypes" yaml:"acceptedFileTypes"`
 		ResolvedAcceptedExtensions []string `json:"resolvedAcceptedExtensions,omitempty" yaml:"-"`

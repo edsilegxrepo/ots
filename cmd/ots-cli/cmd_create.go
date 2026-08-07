@@ -45,6 +45,7 @@ func init() {
 	createCmd.Flags().String("instance", defaultInstance, "Instance to create the secret with")
 	createCmd.Flags().StringSliceP("file", "f", nil, "File(s) to attach to the secret")
 	createCmd.Flags().Bool("no-text", false, "Disable secret read (create a secret with only files)")
+	createCmd.Flags().IntP("reads", "r", 1, "Number of allowed views before secret is permanently destroyed")
 	createCmd.Flags().String("secret-from", "-", `File to read the secret content from ("-" for STDIN)`)
 	createCmd.Flags().StringP("user", "u", "", "Username / Password for basic auth, specified as 'user:pass'")
 	rootCmd.AddCommand(createCmd)
@@ -100,13 +101,21 @@ func createRunE(cmd *cobra.Command, _ []string) (err error) {
 		return fmt.Errorf("getting expire flag: %w", err)
 	}
 
+	reads, err := cmd.Flags().GetInt("reads")
+	if err != nil {
+		return fmt.Errorf("getting reads flag: %w", err)
+	}
+
 	// Execute sanity checks
 	if err = client.SanityCheck(instanceURL, secret); err != nil {
 		return fmt.Errorf("sanity checking secret: %w", err)
 	}
 
 	// Create the secret
-	secretURL, expiresAt, err := client.Create(instanceURL, secret, expire)
+	secretURL, expiresAt, err := client.CreateWithOpts(instanceURL, secret, client.CreateOpts{
+		ExpireIn: expire,
+		Reads:    reads,
+	})
 	if err != nil {
 		return fmt.Errorf("creating secret: %w", err)
 	}

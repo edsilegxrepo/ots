@@ -81,6 +81,12 @@ func init() {
 	Logger = logrus.NewEntry(l)
 }
 
+// CreateOpts specifies configurable parameters for secret creation in the Go client SDK.
+type CreateOpts struct {
+	ExpireIn time.Duration
+	Reads    int
+}
+
 // Create serializes the secret and creates a new secret on the
 // instance given by its URL.
 //
@@ -90,6 +96,14 @@ func init() {
 //
 // So for OTS.fyi you'd use `New("https://ots.fyi/")`
 func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, time.Time, error) {
+	return CreateWithOpts(instanceURL, secret, CreateOpts{
+		ExpireIn: expireIn,
+		Reads:    1,
+	})
+}
+
+// CreateWithOpts serializes the secret and creates a new secret on the instance with customizable options.
+func CreateWithOpts(instanceURL string, secret Secret, opts CreateOpts) (string, time.Time, error) {
 	u, err := url.Parse(instanceURL)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("parsing instance URL: %w", err)
@@ -105,10 +119,16 @@ func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, 
 		return "", time.Time{}, fmt.Errorf("serializing data: %w", err)
 	}
 
-	body := new(bytes.Buffer)
-	if err = json.NewEncoder(body).Encode(struct {
+	bodyPayload := struct {
+		Reads  int    `json:"reads,omitempty"`
 		Secret string `json:"secret"` //#nosec:G117 // This application works with secrets
-	}{Secret: string(data)}); err != nil {
+	}{
+		Reads:  opts.Reads,
+		Secret: string(data),
+	}
+
+	body := new(bytes.Buffer)
+	if err = json.NewEncoder(body).Encode(bodyPayload); err != nil {
 		return "", time.Time{}, fmt.Errorf("encoding request payload: %w", err)
 	}
 
@@ -116,9 +136,9 @@ func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, 
 	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
 	defer cancel()
 
-	if expireIn > time.Second {
+	if opts.ExpireIn > time.Second {
 		createURL.RawQuery = url.Values{
-			"expire": []string{strconv.Itoa(int(expireIn / time.Second))},
+			"expire": []string{strconv.Itoa(int(opts.ExpireIn / time.Second))},
 		}.Encode()
 	}
 
@@ -138,24 +158,28 @@ func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, 
 	if resp.StatusCode != http.StatusCreated {
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return "", time.Time{}, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+			return "", time.Time{}, fmt.Errorf("http error: status %d", resp.StatusCode)
 		}
-		return "", time.Time{}, fmt.Errorf("unexpected HTTP status %d (%s)", resp.StatusCode, respBody)
+		return "", time.Time{}, fmt.Errorf("http error: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var payload struct {
-		ExpiresAt time.Time `json:"expires_at"`
-		SecretID  string    `json:"secret_id"`
-		Success   bool      `json:"success"`
+	var res struct {
+		ExpiresAt *time.Time `json:"expires_at"`
+		SecretID  string     `json:"secret_id"`
 	}
 
-	if err = json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", time.Time{}, fmt.Errorf("decoding response: %w", err)
+	if err = json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", time.Time{}, fmt.Errorf("decoding response payload: %w", err)
 	}
 
-	u.Fragment = strings.Join([]string{payload.SecretID, pass}, "|")
+	u.Fragment = strings.Join([]string{res.SecretID, pass}, "|")
 
-	return u.String(), payload.ExpiresAt, nil
+	var expiresAt time.Time
+	if res.ExpiresAt != nil {
+		expiresAt = *res.ExpiresAt
+	}
+
+	return u.String(), expiresAt, nil
 }
 
 // Fetch retrieves a secret by its given URL. The URL given must

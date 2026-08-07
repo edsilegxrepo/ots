@@ -58,15 +58,17 @@ type (
 
 // apiResponse standardizes JSON responses returned by the API.
 type apiResponse struct {
-	Success   bool       `json:"success"`
-	Error     string     `json:"error,omitempty"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
-	Secret    string     `json:"secret,omitempty"` //#nosec:G117 // This application works with secrets
-	SecretID  string     `json:"secret_id,omitempty"`
+	Success        bool       `json:"success"`
+	Error          string     `json:"error,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	ReadsRemaining int        `json:"reads_remaining,omitempty"`
+	Secret         string     `json:"secret,omitempty"` //#nosec:G117 // This application works with secrets
+	SecretID       string     `json:"secret_id,omitempty"`
 }
 
 // apiRequest models incoming JSON secret submission payloads.
 type apiRequest struct {
+	Reads  int    `json:"reads,omitempty"`
 	Secret string `json:"secret"` //#nosec:G117 // This application works with secrets
 }
 
@@ -108,7 +110,7 @@ func (a *apiServer) errorResponse(res http.ResponseWriter, status int, err error
 }
 
 // handleCreate processes incoming secret creation requests (JSON or form-urlencoded), enforcing rate limits,
-// maximum secret size limits, and total instance attachment storage caps.
+// storage caps, maximum secret payload boundaries, and expiration lifetimes.
 func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 	if !a.rateLimiter.Allow(clientIP) {
@@ -117,27 +119,25 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cust.MaxSecretSize > 0 {
-		// As a safeguard against HUGE payloads behind a misconfigured
-		// proxy we take double the maximum secret size after which we
-		// just close the read and cut the connection to the sender.
-		r.Body = http.MaxBytesReader(res, r.Body, cust.MaxSecretSize*2)
-	}
-
 	var (
-		expiry = cfg.SecretExpiry
+		err    error
+		expiry int64
 		secret string
 	)
 
-	if !cust.DisableExpiryOverride {
-		var err error
-		if expiry, err = a.parseExpiryOverride(r, expiry); err != nil {
-			a.collector.CountSecretCreateError(errorReasonInvalidExpiry)
-			a.errorResponse(res, http.StatusBadRequest, err, "")
-			return
-		}
+	if expiry, err = a.parseExpiryOverride(r, cfg.SecretExpiry); err != nil {
+		a.collector.CountSecretCreateError(errorReasonInvalidExpiry)
+		a.errorResponse(res, http.StatusBadRequest, err, "parsing secret expiry")
+		return
 	}
 
+	if cust.DisableExpiryOverride && expiry != cfg.SecretExpiry {
+		a.collector.CountSecretCreateError(errorReasonInvalidExpiry)
+		a.errorResponse(res, http.StatusBadRequest, errors.New("custom expiry is disabled on this instance"), "")
+		return
+	}
+
+	requestedReads := 1
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		tmp := apiRequest{}
 		if err := json.NewDecoder(r.Body).Decode(&tmp); err != nil {
@@ -154,8 +154,29 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 			return
 		}
 		secret = tmp.Secret
+		if tmp.Reads > 1 {
+			requestedReads = tmp.Reads
+		}
 	} else {
 		secret = r.FormValue("secret")
+		if r.FormValue("reads") != "" {
+			if parsed, parseErr := strconv.Atoi(r.FormValue("reads")); parseErr == nil && parsed > 1 {
+				requestedReads = parsed
+			}
+		}
+	}
+
+	if requestedReads > 1 {
+		if cust.MaxSecretReads == 0 || cust.DisableReusabilityOverride {
+			a.collector.CountSecretCreateError(errorReasonInvalidJSON)
+			a.errorResponse(res, http.StatusBadRequest, errors.New("secret reusability is disabled on this instance"), "")
+			return
+		}
+		if requestedReads > cust.MaxSecretReads {
+			a.collector.CountSecretCreateError(errorReasonInvalidJSON)
+			a.errorResponse(res, http.StatusBadRequest, errors.New("requested reads exceed maximum allowed by server"), "")
+			return
+		}
 	}
 
 	if secret == "" {
@@ -179,7 +200,7 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	id, err := a.store.Create(secret, time.Duration(expiry)*time.Second)
+	id, err := a.store.Create(secret, time.Duration(expiry)*time.Second, requestedReads)
 	if err != nil {
 		a.collector.CountSecretCreateError(errorReasonStorageError)
 		a.errorResponse(res, http.StatusInternalServerError, err, "creating secret")
@@ -195,9 +216,10 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 
 	a.collector.CountSecretCreated()
 	a.jsonResponse(res, http.StatusCreated, apiResponse{
-		ExpiresAt: expiresAt,
-		Success:   true,
-		SecretID:  id,
+		ExpiresAt:      expiresAt,
+		ReadsRemaining: requestedReads,
+		Success:        true,
+		SecretID:       id,
 	})
 }
 
@@ -210,7 +232,7 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret, err := a.store.ReadAndDestroy(id)
+	secret, readsRemaining, err := a.store.ReadAndDestroy(id)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, storage.ErrSecretNotFound) {
@@ -223,12 +245,15 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.storageBytes.Add(-int64(len(secret)))
+	if readsRemaining <= 0 {
+		a.storageBytes.Add(-int64(len(secret)))
+	}
 
 	a.collector.CountSecretRead()
 	a.jsonResponse(res, http.StatusOK, apiResponse{
-		Success: true,
-		Secret:  secret,
+		ReadsRemaining: readsRemaining,
+		Success:        true,
+		Secret:         secret,
 	})
 }
 

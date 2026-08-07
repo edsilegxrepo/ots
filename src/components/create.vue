@@ -89,44 +89,73 @@
             @file-clicked="deleteFile"
           />
         </div>
-        <div class="col-md-6 col-12 order-2 order-md-1">
-          <button
-            type="submit"
-            class="btn btn-success"
-            :disabled="!canCreate"
-          >
-            <template v-if="!createRunning">
-              {{ $t('btn-create-secret') }}
-            </template>
-            <template v-else>
-              <i class="fa-solid fa-spinner fa-spin-pulse" />
-              {{ $t('btn-create-secret-processing') }}
-            </template>
-          </button>
-        </div>
-        <div
-          v-if="!customize.disableExpiryOverride"
-          class="col-md-6 col-12 order-1 order-md-2"
-        >
-          <div class="row mb-3 justify-content-end">
-            <label
-              class="col-md-6 col-form-label text-md-end"
-              for="createSecretExpiry"
-            >{{ $t('label-expiry') }}</label>
-            <div class="col-md-6">
-              <select
-                id="createSecretExpiry"
-                v-model="selectedExpiry"
-                class="form-select"
+        <div class="col-12">
+          <div class="row align-items-center justify-content-between gy-2">
+            <div class="col-12 col-md-auto">
+              <button
+                type="submit"
+                class="btn btn-success"
+                :disabled="!canCreate"
               >
-                <option
-                  v-for="opt in expiryChoices"
-                  :key="opt.value || 'null'"
-                  :value="opt.value"
+                <template v-if="!createRunning">
+                  {{ $t('btn-create-secret') }}
+                </template>
+                <template v-else>
+                  <i class="fa-solid fa-spinner fa-spin-pulse" />
+                  {{ $t('btn-create-secret-processing') }}
+                </template>
+              </button>
+            </div>
+
+            <div class="col-12 col-md-auto ms-md-auto d-flex flex-wrap align-items-center gap-3">
+              <div
+                v-if="customize.maxSecretReads > 0 && !customize.disableReusabilityOverride"
+                class="d-flex align-items-center"
+              >
+                <label
+                  class="col-form-label me-2 text-nowrap"
+                  for="createSecretReads"
+                >{{ $t('label-reusability') }}</label>
+                <select
+                  id="createSecretReads"
+                  v-model.number="selectedReads"
+                  class="form-select"
                 >
-                  {{ opt.text }}
-                </option>
-              </select>
+                  <option :value="1">
+                    {{ $t('option-single-read') }}
+                  </option>
+                  <option
+                    v-for="r in (customize.maxSecretReads - 1)"
+                    :key="r + 1"
+                    :value="r + 1"
+                  >
+                    {{ $t('option-multi-read', { count: r + 1 }) }}
+                  </option>
+                </select>
+              </div>
+
+              <div
+                v-if="!customize.disableExpiryOverride"
+                class="d-flex align-items-center"
+              >
+                <label
+                  class="col-form-label me-2 text-nowrap"
+                  for="createSecretExpiry"
+                >{{ $t('label-expiry') }}</label>
+                <select
+                  id="createSecretExpiry"
+                  v-model="selectedExpiry"
+                  class="form-select"
+                >
+                  <option
+                    v-for="opt in expiryChoices"
+                    :key="opt.value || 'null'"
+                    :value="opt.value"
+                  >
+                    {{ opt.text }}
+                  </option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -315,6 +344,7 @@ export default defineComponent({
 			securePassword: null,
 			selectedExpiry: null,
 			selectedFileMeta: [],
+			selectedReads: 1,
 		};
 	},
 
@@ -389,8 +419,13 @@ export default defineComponent({
 						reqURL = `/api/create?expire=${this.selectedExpiry}`;
 					}
 
+					const bodyPayload: any = { secret };
+					if (this.selectedReads > 1) {
+						bodyPayload.reads = this.selectedReads;
+					}
+
 					return fetch(reqURL, {
-						body: JSON.stringify({ secret }),
+						body: JSON.stringify(bodyPayload),
 						headers: {
 							"content-type": "application/json",
 						},

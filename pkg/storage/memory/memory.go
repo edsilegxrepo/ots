@@ -13,8 +13,9 @@ import (
 
 type (
 	memStorageSecret struct {
-		Expiry time.Time
-		Secret string //#nosec:G117 // This application works with secrets
+		Expiry         time.Time
+		ReadsRemaining int
+		Secret         string //#nosec:G117 // This application works with secrets
 	}
 
 	storageMem struct {
@@ -43,7 +44,7 @@ func (s *storageMem) Count() (int64, error) {
 	return int64(len(s.store)), nil
 }
 
-func (s *storageMem) Create(secret string, expireIn time.Duration) (string, error) {
+func (s *storageMem) Create(secret string, expireIn time.Duration, reads int) (string, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -56,33 +57,44 @@ func (s *storageMem) Create(secret string, expireIn time.Duration) (string, erro
 		expire = time.Now().Add(expireIn)
 	}
 
+	if reads <= 0 {
+		reads = 1
+	}
+
 	s.store[id] = memStorageSecret{
-		Expiry: expire,
-		Secret: secret,
+		Expiry:         expire,
+		ReadsRemaining: reads,
+		Secret:         secret,
 	}
 
 	return id, nil
 }
 
-func (s *storageMem) ReadAndDestroy(id string) (string, error) {
+func (s *storageMem) ReadAndDestroy(id string) (string, int, error) {
 	s.Lock()
 	defer s.Unlock()
 
 	secret, ok := s.store[id]
 	if !ok {
-		return "", storage.ErrSecretNotFound
+		return "", 0, storage.ErrSecretNotFound
 	}
-
-	defer delete(s.store, id)
 
 	// Still check to see if the secret has expired in order to prevent a
 	// race condition where a secret has expired but the store pruner has
 	// not yet been invoked.
 	if secret.hasExpired() {
-		return "", storage.ErrSecretNotFound
+		delete(s.store, id)
+		return "", 0, storage.ErrSecretNotFound
 	}
 
-	return secret.Secret, nil
+	secret.ReadsRemaining--
+	if secret.ReadsRemaining <= 0 {
+		delete(s.store, id)
+	} else {
+		s.store[id] = secret
+	}
+
+	return secret.Secret, secret.ReadsRemaining, nil
 }
 
 func (s *storageMem) pruneStore() {
