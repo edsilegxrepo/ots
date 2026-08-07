@@ -10,6 +10,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -741,4 +742,42 @@ func TestSecretReusabilityMultiRead(t *testing.T) {
 	res4 := httptest.NewRecorder()
 	api.handleRead(res4, readReq4)
 	require.Equal(t, http.StatusNotFound, res4.Code)
+}
+
+func TestAPICreateFileExtensionFiltering(t *testing.T) {
+	origAccepted := cust.AcceptedFileTypes
+	defer func() { cust.AcceptedFileTypes = origAccepted }()
+
+	cust.AcceptedFileTypes = "@images, .pdf"
+
+	store := memory.New()
+	api := NewAPI(store, testCollector)
+
+	// Construct OTS1 payload with disallowed extension (.exe)
+	disallowedMetaJSON := `{"files":[{"name":"malware.exe","size":100,"type":"application/x-msdownload"}],"secret":"encrypted_payload"}`
+	disallowedPayload := "OTS1" + base64.StdEncoding.EncodeToString([]byte(disallowedMetaJSON))
+
+	body, err := json.Marshal(apiRequest{Secret: disallowedPayload})
+	require.NoError(t, err)
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+
+	api.handleCreate(res, req)
+	assert.Equal(t, http.StatusBadRequest, res.Code)
+
+	// Construct OTS1 payload with allowed extension (.png)
+	allowedMetaJSON := `{"files":[{"name":"photo.png","size":100,"type":"image/png"}],"secret":"encrypted_payload"}`
+	allowedPayload := "OTS1" + base64.StdEncoding.EncodeToString([]byte(allowedMetaJSON))
+
+	bodyOk, err := json.Marshal(apiRequest{Secret: allowedPayload})
+	require.NoError(t, err)
+
+	reqOk := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", bytes.NewReader(bodyOk))
+	reqOk.Header.Set("Content-Type", "application/json")
+	resOk := httptest.NewRecorder()
+
+	api.handleCreate(resOk, reqOk)
+	assert.Equal(t, http.StatusCreated, resOk.Code)
 }

@@ -3,6 +3,23 @@
 All notable changes to **OTS (One-Time Secrets)** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.42.0] - 2026-08-07
+
+### Security & Validation
+- **API-Level Extension Filtering (`api.go`, `api_test.go`):**
+  - Enforced server-side file extension validation directly in `POST /api/create` handler, eliminating security risks from unauthenticated API requests attempting to bypass Vue frontend validation.
+  - Automatically decodes unencrypted `"OTS1"` metadata containers to inspect attached filenames, cross-referencing against configured `cust.AcceptedFileTypes` and group aliases (`@images`, `@office`, `@security`).
+  - Immediately rejects invalid file uploads with HTTP `400 Bad Request` and `{"success": false, "error": "file_extension_not_allowed"}`.
+
+### Added
+- **Pluggable Storage Backends (`pkg/storage/factory`, `pkg/storage/memcached`, `pkg/storage/sqlite`, `pkg/storage/badger`):**
+  - **Unified Storage Factory (`pkg/storage/factory`):** Introduced connection URI engine supporting `memory://`, `redis://`, `memcached://`, `sqlite://`, and `badger://`.
+  - **Memcached Distributed Engine (`pkg/storage/memcached`):** Integrated 100% pure Go `github.com/bradfitz/gomemcache` driver with Compare-And-Set (CAS) atomic read-and-destroy semantics.
+  - **SQLite Relational Engine (`pkg/storage/sqlite`):** Integrated 100% CGO-free `modernc.org/sqlite` pure Go driver (`sqlite:///path/to/ots.db` or `sqlite://:memory:`) with WAL journal mode, busy timeouts, and background expiration cleanup ticker.
+  - **BadgerDB LSM Engine (`pkg/storage/badger`):** Integrated 100% CGO-free `github.com/dgraph-io/badger/v4` high-performance log-structured merge-tree database (`badger:///path/to/db`) utilizing native entry TTL expiration (`WithTTL`) and ACID value log garbage collection.
+
+---
+
 ## [v1.41.0] - 2026-08-06
 
 ### Added

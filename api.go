@@ -17,6 +17,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 
+	"github.com/Luzifer/ots/pkg/customization"
 	"github.com/Luzifer/ots/pkg/metrics"
 	"github.com/Luzifer/ots/pkg/storage"
 )
@@ -185,6 +187,22 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Backend API-Level File Extension Validation
+	if cust.AcceptedFileTypes != "" {
+		allowedExts := customization.ExpandAcceptedFileTypes(cust.AcceptedFileTypes, nil)
+		if len(allowedExts) > 0 {
+			if filenames := extractOTSAttachedFilenames(secret); len(filenames) > 0 {
+				for _, fname := range filenames {
+					if !customization.IsFilenameAllowed(fname, allowedExts) {
+						a.collector.CountSecretCreateError("file_extension_not_allowed")
+						a.errorResponse(res, http.StatusBadRequest, errors.New("file extension not allowed on this server"), "disallowed attachment extension: "+fname)
+						return
+					}
+				}
+			}
+		}
+	}
+
 	if cust.MaxSecretSize > 0 && len(secret) > int(cust.MaxSecretSize) {
 		a.collector.CountSecretCreateError(errorReasonSecretSize)
 		a.errorResponse(res, http.StatusBadRequest, errors.New("secret size exceeds maximum"), "")
@@ -303,4 +321,35 @@ func (*apiServer) parseExpiryOverride(r *http.Request, expiry int64) (int64, err
 	}
 
 	return expiry, nil
+}
+
+type otsMetaPayload struct {
+	Files []struct {
+		Name string `json:"name"`
+	} `json:"files"`
+}
+
+func extractOTSAttachedFilenames(secret string) []string {
+	if !strings.HasPrefix(secret, "OTS1") {
+		return nil
+	}
+
+	b64Data := strings.TrimPrefix(secret, "OTS1")
+	rawJSON, err := base64.StdEncoding.DecodeString(b64Data)
+	if err != nil {
+		return nil
+	}
+
+	var meta otsMetaPayload
+	if err := json.Unmarshal(rawJSON, &meta); err != nil {
+		return nil
+	}
+
+	var names []string
+	for _, f := range meta.Files {
+		if f.Name != "" {
+			names = append(names, f.Name)
+		}
+	}
+	return names
 }
