@@ -102,3 +102,32 @@ func TestCLIAttachmentCreationE2EAgainstLiveServer(t *testing.T) {
 	assert.Equal(t, "confidential.pdf", s.Attachments[0].Name)
 	assert.Equal(t, []byte("%PDF-1.4 E2E Live Test Document Content"), s.Attachments[0].Content)
 }
+
+func TestCLIMultiAttachmentAndExtensionValidationE2E(t *testing.T) {
+	tmpDir := t.TempDir()
+	docPath := filepath.Join(tmpDir, "report.pdf")
+	err := os.WriteFile(docPath, []byte("%PDF-1.4 Report Data"), 0o600)
+	require.NoError(t, err)
+
+	imgPath := filepath.Join(tmpDir, "chart.png")
+	err = os.WriteFile(imgPath, []byte("\x89PNG\r\n\x1a\nFakeImageData"), 0o600)
+	require.NoError(t, err)
+
+	docContent, err := os.ReadFile(docPath)
+	require.NoError(t, err)
+	imgContent, err := os.ReadFile(imgPath)
+	require.NoError(t, err)
+
+	s := client.Secret{
+		Secret: "CLI Multi-Attachment Secret Payload",
+		Attachments: []client.SecretAttachment{
+			{Name: "report.pdf", Type: "application/pdf", Content: docContent},
+			{Name: "chart.png", Type: "image/png", Content: imgContent},
+		},
+	}
+
+	assert.Equal(t, "CLI Multi-Attachment Secret Payload", s.Secret)
+	require.Len(t, s.Attachments, 2)
+	assert.Equal(t, "report.pdf", s.Attachments[0].Name)
+	assert.Equal(t, "chart.png", s.Attachments[1].Name)
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/Luzifer/ots/pkg/customization"
 	"github.com/Luzifer/ots/pkg/metrics"
 	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/Luzifer/ots/pkg/storage/factory"
 	"github.com/Luzifer/ots/pkg/storage/memory"
 )
 
@@ -800,4 +801,101 @@ func TestExtractOTSAttachedFilenames(t *testing.T) {
 	require.Len(t, filenames, 2)
 	assert.Equal(t, "contract.pdf", filenames[0])
 	assert.Equal(t, "archive.zip", filenames[1])
+}
+
+func TestLiveServerAPIExtensionFilteringE2E(t *testing.T) {
+	origAccepted := cust.AcceptedFileTypes
+	defer func() {
+		cust.AcceptedFileTypes = origAccepted
+		cust.ResolvedAcceptedExtensions = nil
+	}()
+
+	cust.AcceptedFileTypes = "@images, .pdf"
+	cust.ApplyFixes()
+
+	store := memory.New()
+	api := newAPI(store, testCollector)
+	r := mux.NewRouter()
+	api.Register(r.PathPrefix("/api").Subrouter())
+
+	liveServer := httptest.NewServer(r)
+	defer liveServer.Close()
+
+	// 1. Attempt POSTing disallowed extension (.exe) in OTS1 container against live server
+	disallowedMetaJSON := `{"files":[{"name":"malware.exe","size":100,"type":"application/x-msdownload"}],"secret":"encrypted_payload"}`
+	disallowedPayload := "OTS1" + base64.StdEncoding.EncodeToString([]byte(disallowedMetaJSON))
+
+	body, err := json.Marshal(apiRequest{Secret: disallowedPayload})
+	require.NoError(t, err)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, liveServer.URL+"/api/create", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// 2. POSTing allowed extension (.pdf) in OTS1 container against live server succeeds
+	allowedMetaJSON := `{"files":[{"name":"document.pdf","size":100,"type":"application/pdf"}],"secret":"encrypted_payload"}`
+	allowedPayload := "OTS1" + base64.StdEncoding.EncodeToString([]byte(allowedMetaJSON))
+
+	bodyOk, err := json.Marshal(apiRequest{Secret: allowedPayload})
+	require.NoError(t, err)
+
+	reqOk, err := http.NewRequestWithContext(t.Context(), http.MethodPost, liveServer.URL+"/api/create", bytes.NewReader(bodyOk))
+	require.NoError(t, err)
+	reqOk.Header.Set("Content-Type", "application/json")
+
+	respOk, err := http.DefaultClient.Do(reqOk)
+	require.NoError(t, err)
+	defer func() { _ = respOk.Body.Close() }()
+	assert.Equal(t, http.StatusCreated, respOk.StatusCode)
+}
+
+func TestLiveServerPluggableStorageBackendsE2E(t *testing.T) {
+	backends := []struct {
+		name string
+		url  string
+	}{
+		{name: "SQLite-Memory", url: "sqlite://:memory:"},
+		{name: "BadgerDB-Memory", url: "badger://:memory:"},
+	}
+
+	for _, b := range backends {
+		t.Run(b.name, func(t *testing.T) {
+			engine, err := factory.CreateStorageEngine(b.url)
+			require.NoError(t, err)
+
+			api := newAPI(engine, testCollector)
+			r := mux.NewRouter()
+			api.Register(r.PathPrefix("/api").Subrouter())
+
+			liveServer := httptest.NewServer(r)
+			defer liveServer.Close()
+
+			sec := client.Secret{
+				Secret: "Secret stored in " + b.name + " backend",
+				Attachments: []client.SecretAttachment{
+					{Name: "test.txt", Type: "text/plain", Content: []byte("backend test data")},
+				},
+			}
+
+			secretURL, _, err := client.Create(liveServer.URL, sec, 5*time.Minute)
+			require.NoError(t, err)
+			assert.NotEmpty(t, secretURL)
+
+			fetched, err := client.Fetch(secretURL)
+			require.NoError(t, err)
+			assert.Equal(t, "Secret stored in "+b.name+" backend", fetched.Secret)
+			require.Len(t, fetched.Attachments, 1)
+			assert.Equal(t, "test.txt", fetched.Attachments[0].Name)
+
+			// Destroy on read verification
+			_, err = client.Fetch(secretURL)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unexpected HTTP status 404")
+		})
+	}
 }
