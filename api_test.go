@@ -24,13 +24,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/auth"
-	"github.com/Luzifer/ots/pkg/client"
-	"github.com/Luzifer/ots/pkg/customization"
-	"github.com/Luzifer/ots/pkg/metrics"
-	"github.com/Luzifer/ots/pkg/storage"
-	"github.com/Luzifer/ots/pkg/storage/factory"
-	"github.com/Luzifer/ots/pkg/storage/memory"
+	"github.com/edsilegxrepo/ots/pkg/auth"
+	"github.com/edsilegxrepo/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/customization"
+	"github.com/edsilegxrepo/ots/pkg/metrics"
+	"github.com/edsilegxrepo/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage/factory"
+	"github.com/edsilegxrepo/ots/pkg/storage/memory"
 )
 
 var testCollector = metrics.New()

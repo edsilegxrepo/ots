@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/client"
 )
 
 func TestCLICreateAndFetchE2EAgainstLiveServer(t *testing.T) {
@@ -130,4 +130,97 @@ func TestCLIMultiAttachmentAndExtensionValidationE2E(t *testing.T) {
 	require.Len(t, s.Attachments, 2)
 	assert.Equal(t, "report.pdf", s.Attachments[0].Name)
 	assert.Equal(t, "chart.png", s.Attachments[1].Name)
+}
+
+func TestCLICreateNoteViaPositionalArgumentAndNoteFlag(t *testing.T) {
+	// Test positional note argument extraction
+	cmdPositional := createCmd
+	contentPos, err := getSecretContent(cmdPositional, []string{"My Positional Note Content"})
+	require.NoError(t, err)
+	assert.Equal(t, "My Positional Note Content", contentPos)
+
+	// Test -n / --note flag extraction
+	cmdFlag := createCmd
+	err = cmdFlag.Flags().Set("note", "My Flag Note Content")
+	require.NoError(t, err)
+	contentFlag, err := getSecretContent(cmdFlag, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "My Flag Note Content", contentFlag)
+
+	// Reset flag for subsequent tests
+	_ = cmdFlag.Flags().Set("note", "")
+}
+
+func TestCLINewCommands(t *testing.T) {
+	// 1. Test genpass command
+	pass, err := generateRandomPassword(32)
+	require.NoError(t, err)
+	assert.Len(t, pass, 32)
+	assert.Regexp(t, `^[0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ]+$`, pass)
+
+	// 2. Test info / settings server endpoint loading
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"appTitle": "Test OTS Instance",
+			"disableFileAttachment": false,
+			"maxAttachmentSizeTotal": 10485760,
+			"resolvedAcceptedExtensions": [".pdf", ".txt"]
+		}`))
+	}))
+	defer s.Close()
+
+	settings, err := client.LoadSettings(s.URL)
+	require.NoError(t, err)
+	assert.Equal(t, "Test OTS Instance", settings.AppTitle)
+	assert.Equal(t, int64(10485760), settings.MaxAttachmentSizeTotal)
+	assert.Equal(t, []string{".pdf", ".txt"}, settings.ResolvedAcceptedExtensions)
+}
+
+func TestCLIBurnAndInfoE2EAgainstLiveServer(t *testing.T) {
+	// Create valid encrypted payload using client SDK
+	secretID := "burn-test-uuid-1234"
+	secretKey := "12345678901234567890" // 20-char key
+	validCiphertext, err := client.EncryptOpenSSL(secretKey, []byte("Burn Me Content"))
+	require.NoError(t, err)
+
+	burned := false
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/settings" {
+			_, _ = w.Write([]byte(`{"appTitle":"Live OTS Server","disableFileAttachment":false,"maxAttachmentSizeTotal":10485760,"resolvedAcceptedExtensions":[".pdf",".txt"]}`))
+			return
+		}
+		if r.URL.Path == "/api/get/"+secretID {
+			if burned {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"success":false,"error":"secret not found"}`))
+				return
+			}
+			burned = true
+			respData, _ := json.Marshal(map[string]any{
+				"secret":          string(validCiphertext),
+				"reads_remaining": 0,
+			})
+			_, _ = w.Write(respData)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// 1. Burn secret using burnRunE CLI handler
+	secURL := server.URL + "/#" + secretID + "|" + secretKey
+	err = burnRunE(burnCmd, []string{secURL})
+	require.NoError(t, err)
+	assert.True(t, burned)
+
+	// 2. Attempting to fetch burned secret again must return 404
+	_, err = client.Fetch(secURL)
+	assert.Error(t, err)
+
+	// 3. Test infoRunE CLI handler against live server
+	err = infoRunE(infoCmd, []string{server.URL})
+	require.NoError(t, err)
 }

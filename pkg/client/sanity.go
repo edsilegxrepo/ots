@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Luzifer/ots/pkg/customization"
+	"github.com/edsilegxrepo/ots/pkg/customization"
 )
 
 var (
@@ -31,7 +31,7 @@ var (
 // against those settings (matching file size, disabled attachments,
 // allowed file types, ...)
 func SanityCheck(instanceURL string, secret Secret) error {
-	cust, err := loadSettings(instanceURL)
+	cust, err := LoadSettings(instanceURL)
 	if err != nil {
 		if errors.Is(err, errSettingsNotFound) {
 			// Sanity check is not possible when the API endpoint is not
@@ -71,7 +71,8 @@ func SanityCheck(instanceURL string, secret Secret) error {
 	return nil
 }
 
-func loadSettings(instanceURL string) (c customization.Customize, err error) {
+// LoadSettings fetches and returns the customization settings from an OTS instance.
+func LoadSettings(instanceURL string) (c customization.Customize, err error) {
 	u, err := url.Parse(instanceURL)
 	if err != nil {
 		return c, fmt.Errorf("parsing instance URL: %w", err)

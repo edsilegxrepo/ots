@@ -30,9 +30,9 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Luzifer/ots/pkg/customization"
-	"github.com/Luzifer/ots/pkg/metrics"
-	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/customization"
+	"github.com/edsilegxrepo/ots/pkg/metrics"
+	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 const (

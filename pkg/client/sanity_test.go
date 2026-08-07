@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/customization"
+	"github.com/edsilegxrepo/ots/pkg/customization"
 )
 
 type custMockClient struct {

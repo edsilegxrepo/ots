@@ -120,13 +120,13 @@ sequenceDiagram
 ```
 
 ### Code Relationships & Components:
-- **`main.go`**: Parses CLI flags, configures loggers, sets up CORS middleware, embeds static web assets, and launches HTTP server listeners.
+- **`main.go` & `helpers.go`**: Parses CLI flags via standard `flag` with `os.Getenv` fallbacks, configures loggers, sets up CORS and security headers via custom `CSP`, provides layered filesystem asset resolution (`fsStack`), serves gzip compression (`gzipMiddleware`) and request logging (`httpLoggerMiddleware`), embeds static web assets, and launches HTTP server listeners.
 - **`api.go` (`APIServer`)**: Orchestrates `/api/create`, `/api/get/{id}`, `/api/settings`, `/healthz`, and `/isWritable`.
 - **`ratelimit.go` (`ipRateLimiter`)**: Thread-safe sliding window rate limiter tracking request timestamps per client IP.
 - **`pkg/auth`**: Decoupled Identity & Access Management subsystem providing `ForwardAuth` proxy header trust, `Local` Argon2id password verification (`users.yaml`), and `RBAC` policy evaluation (`allowedGroups`).
 - **`pkg/customization` (`Customize`)**: Resolves operator settings, default expiry choices, and expands group extension aliases (`@images`, `@office`, `@archives`, `@packages`, `@binaries`).
-- **`pkg/client` (`client.go`)**: Client SDK providing programmatic `Create`, `Fetch`, `FetchWithKey`, and `SplitSecretURL` methods.
-- **`cmd/ots-cli`**: CLI client providing secret creation/fetching and `ots-cli user` user directory management (`add`, `list`, `disable`, `delete`).
+- **`pkg/client` (`crypto.go`, `client.go`)**: Pure Go 1.26+ Cryptographic Client SDK providing OpenSSL-compatible AES-256-CBC + PBKDF2 encryption, constant-time PKCS7 unpadding, legacy MD5 KDF fallback, and programmatic `Create`, `Fetch`, `FetchWithKey`, and `SplitSecretURL` methods.
+- **`cmd/ots-cli`**: Standalone CLI client providing secret note creation (`create`), retrieval (`fetch`), immediate destruction (`burn`), server settings & allowed extension queries (`info`), CSPRNG password generation (`genpass`), and `ots-cli user` user directory management (`add`, `list`, `disable`, `delete`).
 
 ---
 
@@ -146,7 +146,7 @@ sequenceDiagram
 ```mermaid
 graph TD
     subgraph "Core Binaries & Submodules"
-        MainModule["github.com/Luzifer/ots<br/>(Main Server Binary)"]
+        MainModule["github.com/edsilegxrepo/ots<br/>(Main Server Binary)"]
         CLIModule["cmd/ots-cli<br/>(Standalone CLI Utility)"]
         ClientModule["pkg/client<br/>(Cryptographic Client SDK)"]
         CustModule["pkg/customization<br/>(Customization & Extensions)"]
@@ -159,14 +159,14 @@ graph TD
         StorageFactory["pkg/storage/factory<br/>(Unified Engine Factory)"]
     end
 
-    subgraph "Third-Party Libraries"
+    subgraph "Standard Library & Third-Party Dependencies"
         Mux["github.com/gorilla/mux<br/>(HTTP Router v1.8.1)"]
-        OpenSSL["github.com/Luzifer/go-openssl/v4<br/>(PBKDF2 / AES Derivation)"]
+        StdCrypto["golang.org/x/crypto/pbkdf2<br/>(Native OpenSSL PBKDF2 / AES-256-CBC)"]
         Prometheus["github.com/prometheus/client_golang<br/>(Metrics v1.24.1)"]
-        GoRedis["github.com/redis/go-redis/v9<br/>(Redis Client v9.21.0)"]
-        SQLiteDriver["modernc.org/sqlite<br/>(Pure Go CGO-Free SQLite v1.41.0)"]
-        BadgerDriver["github.com/dgraph-io/badger/v4<br/>(BadgerDB LSM v4.6.0)"]
-        MemcachedDriver["github.com/bradfitz/gomemcache<br/>(Memcached Client v1.0.0)"]
+        GoRedis["github.com/redis/go-redis/v9<br/>(Redis Client v9.22.0)"]
+        SQLiteDriver["modernc.org/sqlite<br/>(Pure Go CGO-Free SQLite v1.56.0)"]
+        BadgerDriver["github.com/dgraph-io/badger/v4<br/>(BadgerDB LSM v4.9.6)"]
+        MemcachedDriver["github.com/bradfitz/gomemcache<br/>(Memcached Client)"]
         Logrus["github.com/sirupsen/logrus<br/>(Structured Logging v1.9.4)"]
         UUID["github.com/gofrs/uuid<br/>(UUID Generator v4.4.0)"]
         Testify["github.com/stretchr/testify<br/>(Testing Toolkit v1.11.1)"]

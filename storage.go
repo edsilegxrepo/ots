@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/Luzifer/ots/pkg/storage"
-	"github.com/Luzifer/ots/pkg/storage/factory"
+	"github.com/edsilegxrepo/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage/factory"
 )
 
 func getStorageByType(t string) (storage.Storage, error) {

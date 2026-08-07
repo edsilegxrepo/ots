@@ -1,4 +1,4 @@
-module github.com/Luzifer/ots/pkg/tplfunc
+module github.com/edsilegxrepo/ots/pkg/tplfunc
 
 go 1.25.0
 

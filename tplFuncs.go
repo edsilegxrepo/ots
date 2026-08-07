@@ -6,7 +6,7 @@ import (
 	"html/template"
 	"sync"
 
-	"github.com/Luzifer/ots/pkg/tplfunc"
+	"github.com/edsilegxrepo/ots/pkg/tplfunc"
 )
 
 type (

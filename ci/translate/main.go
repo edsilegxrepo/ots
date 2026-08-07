@@ -3,47 +3,81 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
-	"github.com/Luzifer/rconfig/v2"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 
-	"github.com/Luzifer/ots/pkg/tplfunc"
+	"github.com/edsilegxrepo/ots/pkg/tplfunc"
 )
 
 const deeplRequestTimeout = 10 * time.Second
 
 var (
 	cfg = struct {
-		AutoTranslate    bool   `flag:"auto-translate" default:"false" description:"Enable auto-translation through DeepL"`
-		DeeplAPIEndpoint string `flag:"deepl-api-endpoint" default:"https://api-free.deepl.com/v2/translate" description:"DeepL API endpoint to request translations from"`
-		DeeplAPIKey      string `flag:"deepl-api-key" default:"" description:"API key for the DeepL API"`
-		IssueFile        string `flag:"issue-file" default:"translate-issue.md" description:"Where to create the translate issue"`
-		OutputFile       string `flag:"output-file,o" default:"src/langs/langs.js" description:"Where to put rendered translations"`
-		Template         string `flag:"template" default:"src/langs/langs.tpl.js" description:"Template to load for translation JS file"`
-		TranslationFile  string `flag:"translation-file,t" default:"i18n.yaml" description:"File to use for translations"`
-		LogLevel         string `flag:"log-level" default:"info" description:"Log level (debug, info, warn, error, fatal)"`
-		Verify           bool   `flag:"verify" default:"true" description:"Run verification against translation file"`
-		VersionAndExit   bool   `flag:"version" default:"false" description:"Prints current version and exits"`
-		WriteIssueFile   bool   `flag:"write-issue-file" default:"false" description:"Generates an issue body for missing translations"`
+		AutoTranslate    bool
+		DeeplAPIEndpoint string
+		DeeplAPIKey      string
+		IssueFile        string
+		OutputFile       string
+		Template         string
+		TranslationFile  string
+		LogLevel         string
+		Verify           bool
+		VersionAndExit   bool
+		WriteIssueFile   bool
 	}{}
 
 	version = "dev"
 )
 
-func initApp() error {
-	rconfig.AutoEnv(true)
-	if err := rconfig.ParseAndValidate(&cfg); err != nil {
-		return fmt.Errorf("parsing cli options: %w", err)
+func parseFlags() {
+	flag.BoolVar(&cfg.AutoTranslate, "auto-translate", getEnvOrDefaultBool("AUTO_TRANSLATE", false), "Enable auto-translation through DeepL")
+	flag.StringVar(&cfg.DeeplAPIEndpoint, "deepl-api-endpoint", getEnvOrDefault("DEEPL_API_ENDPOINT", "https://api-free.deepl.com/v2/translate"), "DeepL API endpoint")
+	flag.StringVar(&cfg.DeeplAPIKey, "deepl-api-key", getEnvOrDefault("DEEPL_API_KEY", ""), "API key for DeepL")
+	flag.StringVar(&cfg.IssueFile, "issue-file", getEnvOrDefault("ISSUE_FILE", "translate-issue.md"), "Where to create translate issue")
+	flag.StringVar(&cfg.OutputFile, "output-file", getEnvOrDefault("OUTPUT_FILE", "src/langs/langs.js"), "Where to put rendered translations")
+	flag.StringVar(&cfg.OutputFile, "o", getEnvOrDefault("OUTPUT_FILE", "src/langs/langs.js"), "Where to put rendered translations (shorthand)")
+	flag.StringVar(&cfg.Template, "template", getEnvOrDefault("TEMPLATE", "src/langs/langs.tpl.js"), "Template JS file")
+	flag.StringVar(&cfg.TranslationFile, "translation-file", getEnvOrDefault("TRANSLATION_FILE", "i18n.yaml"), "File for translations")
+	flag.StringVar(&cfg.TranslationFile, "t", getEnvOrDefault("TRANSLATION_FILE", "i18n.yaml"), "File for translations (shorthand)")
+	flag.StringVar(&cfg.LogLevel, "log-level", getEnvOrDefault("LOG_LEVEL", "info"), "Log level")
+	flag.BoolVar(&cfg.Verify, "verify", getEnvOrDefaultBool("VERIFY", true), "Run verification against translation file")
+	flag.BoolVar(&cfg.VersionAndExit, "version", false, "Prints version information and exits")
+	flag.BoolVar(&cfg.WriteIssueFile, "write-issue-file", getEnvOrDefaultBool("WRITE_ISSUE_FILE", false), "Generates issue body for missing translations")
+
+	if !flag.Parsed() {
+		flag.Parse()
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func getEnvOrDefaultBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return fallback
+}
+
+func initApp() error {
+	parseFlags()
 
 	l, err := logrus.ParseLevel(cfg.LogLevel)
 	if err != nil {

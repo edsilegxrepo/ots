@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/client"
 )
 
 func TestStoreAttachmentCollision(t *testing.T) {

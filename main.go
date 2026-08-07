@@ -6,6 +6,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"errors"
+	"flag"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -14,19 +15,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	filehelpers "github.com/Luzifer/go_helpers/file"
-	httphelpers "github.com/Luzifer/go_helpers/http"
-	"github.com/Luzifer/rconfig/v2"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 
-	"github.com/Luzifer/ots/pkg/auth"
-	"github.com/Luzifer/ots/pkg/customization"
-	"github.com/Luzifer/ots/pkg/metrics"
+	"github.com/edsilegxrepo/ots/pkg/auth"
+	"github.com/edsilegxrepo/ots/pkg/customization"
+	"github.com/edsilegxrepo/ots/pkg/metrics"
 )
 
 const (
@@ -47,7 +46,7 @@ var (
 		LogFilePath    string `flag:"log-file-path" default:"" description:"Path to file for appending log output (e.g. /var/log/ots.log)"`
 		LogFormat      string `flag:"log-format" default:"text" description:"Set log output format (text, json, ndjson)"`
 		SecretExpiry   int64  `flag:"secret-expiry" default:"86400" description:"Maximum expiry of the stored secrets in seconds"`
-		StorageType    string `flag:"storage-type" default:"mem" description:"Storage to use for putting secrets to" validate:"nonzero"` //revive:disable-line:struct-tag // Matches wrong validation library
+		StorageType    string `flag:"storage-type" default:"mem" description:"Storage to use for putting secrets to"`
 		VersionAndExit bool   `flag:"version" default:"false" description:"Print version information and exit"`
 		EnableTLS      bool   `flag:"enable-tls" default:"false" description:"Enable HTTPS/TLS"`
 		CertFile       string `flag:"cert-file" default:"" description:"Path to the TLS certificate file"`
@@ -55,7 +54,7 @@ var (
 		IAMConfigFile  string `flag:"iam-config" default:"" description:"Path to iam.yaml configuration file"`
 	}
 
-	assets   filehelpers.FSStack
+	assets   fsStack
 	cust     customization.Customize
 	indexTpl *template.Template
 
@@ -65,17 +64,17 @@ var (
 //go:embed frontend/*
 var embeddedAssets embed.FS
 
-func defaultCSP() httphelpers.CSP {
-	c := httphelpers.CSP{}
+func defaultCSP() CSP {
+	c := CSP{}
 
-	c.Add("base-uri", httphelpers.CSPSrcSelf)
-	c.Add("default-src", httphelpers.CSPSrcNone)
-	c.Add("connect-src", httphelpers.CSPSrcSelf)
-	c.Add("font-src", httphelpers.CSPSrcSelf)
-	c.Add("img-src", httphelpers.CSPSrcSelf)
-	c.Add("img-src", httphelpers.CSPSrcSchemeData)
-	c.Add("script-src", httphelpers.CSPSrcSelf)
-	c.Add("style-src", httphelpers.CSPSrcSelf)
+	c.Add("base-uri", CSPSrcSelf)
+	c.Add("default-src", CSPSrcNone)
+	c.Add("connect-src", CSPSrcSelf)
+	c.Add("font-src", CSPSrcSelf)
+	c.Add("img-src", CSPSrcSelf)
+	c.Add("img-src", CSPSrcSchemeData)
+	c.Add("script-src", CSPSrcSelf)
+	c.Add("style-src", CSPSrcSelf)
 
 	return c
 }
@@ -98,11 +97,53 @@ func hardenListener(listen string, enableTLS bool) string {
 	return listen
 }
 
-func initApp() error {
-	rconfig.AutoEnv(true)
-	if err := rconfig.ParseAndValidate(&cfg); err != nil {
-		return fmt.Errorf("parsing cli options: %w", err)
+func parseFlags() {
+	flag.StringVar(&cfg.Customize, "customize", getEnvOrDefault("CUSTOMIZE", ""), "Customize-File to load")
+	flag.StringVar(&cfg.Listen, "listen", getEnvOrDefault("LISTEN", ":3000"), "IP/Port to listen on")
+	flag.BoolVar(&cfg.LogRequests, "log-requests", getEnvOrDefaultBool("LOG_REQUESTS", true), "Enable request logging")
+	flag.StringVar(&cfg.LogLevel, "log-level", getEnvOrDefault("LOG_LEVEL", "info"), "Set log level")
+	flag.StringVar(&cfg.LogFilePath, "log-file-path", getEnvOrDefault("LOG_FILE_PATH", ""), "Path to file for appending log output")
+	flag.StringVar(&cfg.LogFormat, "log-format", getEnvOrDefault("LOG_FORMAT", "text"), "Set log output format")
+	flag.Int64Var(&cfg.SecretExpiry, "secret-expiry", getEnvOrDefaultInt64("SECRET_EXPIRY", 86400), "Maximum expiry in seconds")
+	flag.StringVar(&cfg.StorageType, "storage-type", getEnvOrDefault("STORAGE_TYPE", "mem"), "Storage engine type")
+	flag.BoolVar(&cfg.VersionAndExit, "version", false, "Print version information and exit")
+	flag.BoolVar(&cfg.EnableTLS, "enable-tls", getEnvOrDefaultBool("ENABLE_TLS", false), "Enable HTTPS/TLS")
+	flag.StringVar(&cfg.CertFile, "cert-file", getEnvOrDefault("CERT_FILE", ""), "Path to TLS cert")
+	flag.StringVar(&cfg.KeyFile, "key-file", getEnvOrDefault("KEY_FILE", ""), "Path to TLS key")
+	flag.StringVar(&cfg.IAMConfigFile, "iam-config", getEnvOrDefault("IAM_CONFIG", ""), "Path to IAM config file")
+
+	if !flag.Parsed() {
+		flag.Parse()
 	}
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func getEnvOrDefaultBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvOrDefaultInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+func initApp() error {
+	parseFlags()
 
 	l, err := logrus.ParseLevel(cfg.LogLevel)
 	if err != nil {
@@ -141,7 +182,7 @@ func initApp() error {
 	assets = append(assets, frontendFS)
 
 	if cust.OverlayFSPath != "" {
-		assets = append(filehelpers.FSStack{os.DirFS(cust.OverlayFSPath)}, assets...)
+		assets = append(fsStack{os.DirFS(cust.OverlayFSPath)}, assets...)
 	}
 
 	cfg.Listen = hardenListener(cfg.Listen, cfg.EnableTLS)
@@ -287,9 +328,9 @@ func setupHTTPHandler(api *APIServer) http.Handler {
 		}).Info("IAM Authentication middleware enabled")
 	}
 
-	hdl = httphelpers.GzipHandler(hdl)
+	hdl = gzipMiddleware(hdl)
 	if cfg.LogRequests {
-		hdl = httphelpers.NewHTTPLogHandlerWithLogger(hdl, logrus.StandardLogger())
+		hdl = httpLoggerMiddleware(hdl)
 	}
 
 	return hdl
@@ -345,8 +386,8 @@ func handleIndex(w http.ResponseWriter, _ *http.Request) {
 	inlineContentNonceStr := base64.StdEncoding.EncodeToString(inlineContentNonce)
 
 	policy := defaultCSP()
-	policy.Add("script-src", httphelpers.CSPSrcNonce(inlineContentNonceStr))
-	policy.Add("style-src", httphelpers.CSPSrcNonce(inlineContentNonceStr))
+	policy.Add("script-src", CSPSrcNonce(inlineContentNonceStr))
+	policy.Add("style-src", CSPSrcNonce(inlineContentNonceStr))
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")

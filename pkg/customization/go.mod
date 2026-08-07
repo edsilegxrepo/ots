@@ -1,4 +1,4 @@
-module github.com/Luzifer/ots/pkg/customization
+module github.com/edsilegxrepo/ots/pkg/customization
 
 go 1.25.0
 

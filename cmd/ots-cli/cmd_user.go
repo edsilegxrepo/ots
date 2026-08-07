@@ -12,8 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/Luzifer/ots/pkg/auth"
-	"github.com/Luzifer/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/auth"
+	"github.com/edsilegxrepo/ots/pkg/client"
 )
 
 var (

@@ -3,6 +3,31 @@
 All notable changes to **OTS (One-Time Secrets)** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.43.0] - 2026-08-07
+
+### Added
+- **Expanded CLI Utility Commands (`cmd/ots-cli`):**
+  - **Flexible Secret Note Creation (`cmd_create.go`):** Added support for passing secret note content via positional arguments (`ots-cli create "my secret note"`), `-n` / `--note` flags, interactive terminal prompts when STDIN is a TTY, and seamless combination with file attachments (`-f`).
+  - **Server Settings & Info Query (`cmd_info.go`):** Introduced `ots-cli info [instance]` (aliased as `settings` and `status`) to query OTS server limits, maximum payload caps, and allowed file extension rules (`GET /api/settings`) with optional `--json` formatting.
+  - **Instant Secret Destruction (`cmd_burn.go`):** Introduced `ots-cli burn <url>` (aliased as `destroy` and `expire`) to fetch and permanently burn a secret on demand.
+  - **Password Generation Subcommand (`cmd_genpass.go`):** Introduced `ots-cli genpass [--length N]` (aliased as `generate-password` and `passwd`) to generate cryptographically secure random passwords via `crypto/rand`.
+- **Redis Storage Unit Testing (`pkg/storage/redis/redis_test.go`):**
+  - Added unit test suite validating `REDIS_URL` connection URL parsing, error handling for missing/invalid URIs, and custom key prefix namespace formatting (`REDIS_KEY`).
+
+### Refactored & Changed
+- **Workspace Module Rename (`github.com/edsilegxrepo/ots`):**
+  - Updated module declarations, `replace` directives, and internal package imports across root, `pkg/client`, `pkg/customization`, `pkg/tplfunc`, `ci/translate`, and `cmd/ots-cli` from `github.com/Luzifer/ots` to `github.com/edsilegxrepo/ots`.
+- **Complete Purge of Third-Party Luzifer Dependencies (`pkg/client`, `main.go`, `helpers.go`, `ci/translate`):**
+  - **Native OpenSSL Cryptography (`pkg/client/crypto.go`):** Replaced `github.com/Luzifer/go-openssl/v4` with a pure Go 1.26+ implementation utilizing `crypto/cipher`, `crypto/aes`, `crypto/sha512`, `crypto/rand`, and `golang.org/x/crypto/pbkdf2`. Features constant-time PKCS7 unpadding via `crypto/subtle.ConstantTimeByteEq` to prevent padding oracle timing attacks, Base64 auto-decoding, and legacy OpenSSL MD5 KDF fallback for 100% backward compatibility.
+  - **Native Layered Filesystem (`helpers.go`):** Replaced `github.com/Luzifer/go_helpers/file` (`FSStack`) with a pure Go `fsStack` layered filesystem implementing `io/fs.ReadFileFS`.
+  - **Native HTTP Middlewares (`helpers.go`):** Replaced `github.com/Luzifer/go_helpers/http` with pure Go `gzipMiddleware` (hardened to suppress `Content-Encoding: gzip` on `204 No Content` / `304 Not Modified` responses), `httpLoggerMiddleware`, and `CSP` security header builder.
+  - **Native CLI & Server Flag Parsing (`main.go`, `ci/translate/main.go`):** Replaced `github.com/Luzifer/rconfig/v2` with Go standard `flag` package parsing and environment variable fallbacks (`LISTEN`, `CUSTOMIZE`, `SECRET_EXPIRY`, `STORAGE_TYPE`, `ENABLE_TLS`, `IAM_CONFIG`).
+
+### Documentation & Testing
+- Reconciled `README.md`, `ARCHITECTURE.md`, and `TESTING.md` against standard library code changes, new module paths, and expanded CLI live E2E test suite (`TestCLICreateNoteViaPositionalArgumentAndNoteFlag`, `TestCLINewCommands`, `TestCLIBurnAndInfoE2EAgainstLiveServer`).
+
+---
+
 ## [v1.42.0] - 2026-08-07
 
 ### Security & Validation

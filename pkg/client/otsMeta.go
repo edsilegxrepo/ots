@@ -5,8 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-
-	"github.com/Luzifer/go-openssl/v4"
 )
 
 type (
@@ -35,7 +33,7 @@ var metaMarker = []byte("OTSMeta")
 
 func (o *Secret) read(data []byte, passphrase string) (err error) {
 	if passphrase != "" {
-		if data, err = openssl.New().DecryptBytes(passphrase, data, KeyDerivationFunc); err != nil {
+		if data, err = DecryptOpenSSL(passphrase, data); err != nil {
 			return fmt.Errorf("decrypting data: %w", err)
 		}
 	}
@@ -84,7 +82,7 @@ func (o Secret) serialize(passphrase string) ([]byte, error) {
 		return data, nil
 	}
 
-	out, err := openssl.New().EncryptBytes(passphrase, data, KeyDerivationFunc)
+	out, err := EncryptOpenSSL(passphrase, data)
 	if err != nil {
 		return nil, fmt.Errorf("encrypting data: %w", err)
 	}

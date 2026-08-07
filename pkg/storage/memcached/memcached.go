@@ -27,7 +27,7 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/gofrs/uuid"
 
-	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 const (

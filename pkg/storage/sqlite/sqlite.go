@@ -29,7 +29,7 @@ import (
 	"github.com/gofrs/uuid"
 	_ "modernc.org/sqlite"
 
-	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 // Storage implements the storage.Storage interface backed by SQLite

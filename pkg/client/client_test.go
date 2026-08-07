@@ -64,7 +64,7 @@ func TestCreateErrorHandlingAndExpireQuery(t *testing.T) {
 
 	_, _, err = Create(errServer.URL, s, 0)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unexpected HTTP status 400")
+	assert.Contains(t, err.Error(), "http error: status 400")
 
 	// Test server returning invalid JSON
 	invalidJSONServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,28 +102,28 @@ func TestFetchErrorHandling(t *testing.T) {
 }
 
 func TestLoadSettingsErrorHandling(t *testing.T) {
-	// Test loadSettings with invalid URL
-	_, err := loadSettings(":%invalid_url")
+	// Test LoadSettings with invalid URL
+	_, err := LoadSettings(":%invalid_url")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing instance URL")
 
-	// Test loadSettings returning 404 Not Found
+	// Test LoadSettings returning 404 Not Found
 	notFoundServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer notFoundServer.Close()
 
-	_, err = loadSettings(notFoundServer.URL)
+	_, err = LoadSettings(notFoundServer.URL)
 	assert.ErrorIs(t, err, errSettingsNotFound)
 
-	// Test loadSettings returning invalid JSON
+	// Test LoadSettings returning invalid JSON
 	invalidServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`invalid_json`))
 	}))
 	defer invalidServer.Close()
 
-	_, err = loadSettings(invalidServer.URL)
+	_, err = LoadSettings(invalidServer.URL)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "decoding response")
 }

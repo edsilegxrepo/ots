@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 type mockMemcachedClient struct {

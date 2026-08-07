@@ -13,7 +13,7 @@ The OTS test suite is designed around three core principles:
 
 ```mermaid
 graph TD
-    Submodules["OTS Workspace Modules"] --> MainPkg["github.com/Luzifer/ots<br/>(API & Server)"]
+    Submodules["OTS Workspace Modules"] --> MainPkg["github.com/edsilegxrepo/ots<br/>(API & Server)"]
     Submodules --> CustPkg["pkg/customization<br/>(File Groups & Config)"]
     Submodules --> ClientPkg["pkg/client<br/>(Client SDK & Cryptography)"]
     Submodules --> MetricsPkg["pkg/metrics<br/>(Prometheus Collector)"]
@@ -111,8 +111,12 @@ sequenceDiagram
 | **Live E2E** | `TestLiveServerConcurrencyAndAntiSpoofingE2E` | Spawns 20 parallel worker goroutines creating and fetching secrets simultaneously against live HTTP server. | **PASS**: All 20 parallel workers create and fetch secrets with 0 race conditions or deadlocks. |
 | **Live E2E** | `TestLiveServerSanitizedErrorResponsesE2E` | Verifies non-existent IDs and malformed JSON payloads return sanitized UUID error tracking IDs without stack leaks. | **PASS**: 404 and 400 responses return clean sanitized UUID error IDs. |
 | **Live Redis E2E**| `TestLiveRedisStorageValidation` | Validates live secret creation, atomic burn-after-read, and expiration against an orchestrated Redis server on port `63799` via `ots_builder.sh --validate --with-redis [<path>]`. | **PASS**: Secret stored in Redis hash key, retrieved, burned atomically, and verified deleted from Redis. |
+| **Redis Store** | `TestRedisStorageNewValidation` | Tests `REDIS_URL` connection URL validation and custom key namespace prefix formatting (`REDIS_KEY`). | **PASS**: Missing or invalid `REDIS_URL` returns explicit error; `redisKey()` formats correctly. |
 | **Listener Guard**| `TestListenerHardening` | Tests automatic hardening of default `:3000` to `127.0.0.1:3000` when TLS is disabled, while respecting custom `--listen`. | **PASS**: Default `:3000` hardens to `127.0.0.1:3000`; custom `--listen` is honored. |
 | **CLI E2E** | `TestCLICreateAndFetchE2E` | Full E2E CLI client secret creation and retrieval against live test HTTP server. | **PASS**: Secret created, URL formatted, fetched secret matches input, second fetch returns 404. |
+| **CLI E2E** | `TestCLICreateNoteViaPositionalArgumentAndNoteFlag` | Tests CLI secret note creation via positional argument (`ots-cli create "note"`) and `-n/--note` flag. | **PASS**: Note content extracted cleanly from positional argument and flag. |
+| **CLI E2E** | `TestCLINewCommands` | Tests `ots-cli genpass` CSPRNG password generation and `ots-cli info` server settings retrieval. | **PASS**: 32-character password generated; server settings and allowed extensions parsed. |
+| **CLI E2E** | `TestCLIBurnAndInfoE2EAgainstLiveServer` | Tests `ots-cli burn` instant secret destruction and `ots-cli info` capability inspection against live HTTP server. | **PASS**: Secret burned immediately on fetch; second retrieval returns 404. |
 | **CLI E2E** | `TestCLIAttachmentCreationE2E` | Tests CLI attachment serialization with file content payload. | **PASS**: Attachment content, file name, and MIME type preserved. |
 | **CLI Attachments**| `TestStoreAttachmentCollision` | Tests attachment filename deduplication when writing attachments to disk. | **PASS**: Conflicting filenames disambiguated safely without overwriting. |
 | **CLI Attachments**| `TestStoreAttachmentRejectsInvalidNames` | Validates rejection of dangerous path traversal characters in attachment names (`/`, `\`, `.`). | **PASS**: Invalid filenames rejected with explicit error. |

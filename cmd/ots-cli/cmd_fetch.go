@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/Luzifer/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/client"
 )
 
 const storeFileMode = 0o600 // We assume the attached file to be a secret

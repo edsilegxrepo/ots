@@ -53,26 +53,42 @@ As `ots` is designed to never let the server know the secret you are sharing you
 
 Download OTS-CLI from the [Releases](https://github.com/Luzifer/ots/releases) section of the repo or build it yourself having a Go toolchain available from the `./cmd/ots-cli` directory.
 
-Afterwards you can just create and fetch secrets:
+Afterwards you can create and fetch secrets or notes:
 
 ```console
+# Create secret note via argument, flag, interactive prompt, or STDIN pipe:
+# ots-cli create "My secret password or note"
+# ots-cli create -n "My secret note"
 # echo "my password" | ots-cli create
 INFO[0000] reading secret content...                    
 INFO[0000] creating the secret...                       
 INFO[0000] secret created, see URL below                 expires-at="2023-10-16 16:33:27.422174121 +0000 UTC"
 https://ots.fyi/#37a75a7f-0c2d-4ae6-bcca-4208b6d596ab%7CHGShVWm5umv4lmswfM73
 
+# Fetch secret and download attachments:
 # ots-cli fetch 'https://ots.fyi/#37a75a7f-0c2d-4ae6-bcca-4208b6d596ab%7CHGShVWm5umv4lmswfM73'
 INFO[0000] fetching secret...                           
 my password
+
+# Query server capabilities and allowed file extension rules:
+# ots-cli info https://ots.fyi/
+
+# Instantly fetch and permanently burn/destroy a secret:
+# ots-cli burn 'https://ots.fyi/#37a75a7f-0c2d-4ae6-bcca-4208b6d596ab%7CHGShVWm5umv4lmswfM73'
+
+# Generate a cryptographically secure random password:
+# ots-cli genpass --length 32
 ```
 
 To set the instance to send the secret to or to attach files see `ots-cli create --help` and to define where downloaded files are stored see `ots-cli fetch --help`.
 
-Both commands can be used in scripts:
-- `create` reads from `STDIN` or the specified file and yields the URL to `STDOUT`
+Commands overview:
+- `create` reads from argument, `-n/--note`, `STDIN`, or specified file and yields the URL to `STDOUT`
 - `fetch` prints the secret to `STDOUT` and stores files to the given directory
-- both sends logs to `STDERR` which you can disable (`--log-level=fatal`) or ignore in your script
+- `burn` fetches and permanently destroys the secret entry immediately
+- `info` displays server settings, maximum payload caps, and allowed file extension lists
+- `genpass` generates high-entropy random passwords using cryptographic CSPRNG
+- all commands send logs to `STDERR` which you can disable (`--log-level=fatal`) or ignore in your script
 
 In case your instance needs credentials to use the `/api/create` endpoint you can pass them to OTS-CLI like you would do with curl:
 - `ots-cli create --instance ... -u myuser:mypass` for basic-auth

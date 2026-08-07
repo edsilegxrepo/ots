@@ -22,12 +22,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Luzifer/ots/pkg/storage"
-	"github.com/Luzifer/ots/pkg/storage/badger"
-	"github.com/Luzifer/ots/pkg/storage/memcached"
-	"github.com/Luzifer/ots/pkg/storage/memory"
-	"github.com/Luzifer/ots/pkg/storage/redis"
-	"github.com/Luzifer/ots/pkg/storage/sqlite"
+	"github.com/edsilegxrepo/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage/badger"
+	"github.com/edsilegxrepo/ots/pkg/storage/memcached"
+	"github.com/edsilegxrepo/ots/pkg/storage/memory"
+	"github.com/edsilegxrepo/ots/pkg/storage/redis"
+	"github.com/edsilegxrepo/ots/pkg/storage/sqlite"
 )
 
 // CreateStorageEngine instantiates a storage.Storage provider based on a connection URI scheme

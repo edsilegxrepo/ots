@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"fmt"
 	"io"
 	"mime"
@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/Luzifer/ots/pkg/client"
+	"github.com/edsilegxrepo/ots/pkg/client"
 )
 
 type (
@@ -26,12 +26,15 @@ type (
 )
 
 var createCmd = &cobra.Command{
-	Use:     "create [-f file]... [--instance url] [--secret-from file]",
-	Short:   "Create a new encrypted secret in the given OTS instance",
-	Long:    "",
-	Example: `echo "I'm a very secret secret" | ots-cli create`,
-	Args:    cobra.NoArgs,
-	RunE:    createRunE,
+	Use:     "create [note] [-n note] [-f file]... [--instance url] [--secret-from file]",
+	Short:   "Create a new encrypted secret note in the given OTS instance",
+	Long:    "Creates an encrypted secret note or file attachment on an OTS instance. Content can be supplied via argument, --note flag, stdin, or file.",
+	Example: `  ots-cli create "My secret password or note"
+  ots-cli create -n "My secret note"
+  echo "I'm a very secret note" | ots-cli create
+  ots-cli create -f confidential.pdf`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: createRunE,
 }
 
 func init() {
@@ -44,6 +47,7 @@ func init() {
 	createCmd.Flags().StringSliceP("header", "H", nil, "Headers to include in the request (i.e. 'Authorization: Token ...')")
 	createCmd.Flags().String("instance", defaultInstance, "Instance to create the secret with")
 	createCmd.Flags().StringSliceP("file", "f", nil, "File(s) to attach to the secret")
+	createCmd.Flags().StringP("note", "n", "", "Secret / note text content to encrypt")
 	createCmd.Flags().Bool("no-text", false, "Disable secret read (create a secret with only files)")
 	createCmd.Flags().IntP("reads", "r", 1, "Number of allowed views before secret is permanently destroyed")
 	createCmd.Flags().String("secret-from", "-", `File to read the secret content from ("-" for STDIN)`)
@@ -51,7 +55,7 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 }
 
-func createRunE(cmd *cobra.Command, _ []string) (err error) {
+func createRunE(cmd *cobra.Command, args []string) (err error) {
 	cmd.SilenceUsage = true
 
 	var secret client.Secret
@@ -62,7 +66,7 @@ func createRunE(cmd *cobra.Command, _ []string) (err error) {
 
 	// Read the secret content
 	logrus.Info("reading secret content...")
-	if secret.Secret, err = getSecretContent(cmd); err != nil {
+	if secret.Secret, err = getSecretContent(cmd, args); err != nil {
 		return fmt.Errorf("getting secret content: %w", err)
 	}
 
@@ -162,37 +166,72 @@ func constructHTTPClient(cmd *cobra.Command) (*http.Client, error) {
 	return &http.Client{Transport: t}, nil
 }
 
-func getSecretContent(cmd *cobra.Command) (string, error) {
-	secretSourceName, err := cmd.Flags().GetString("secret-from")
+func getSecretContent(cmd *cobra.Command, args []string) (string, error) {
+	noteFlag, err := cmd.Flags().GetString("note")
 	if err != nil {
-		return "", fmt.Errorf("getting secret-from flag: %w", err)
+		return "", fmt.Errorf("getting note flag: %w", err)
+	}
+	if noteFlag != "" {
+		return noteFlag, nil
+	}
+
+	if len(args) > 0 && args[0] != "" {
+		return args[0], nil
 	}
 
 	noSecret, err := cmd.Flags().GetBool("no-text")
 	if err != nil {
 		return "", fmt.Errorf("getting no-text flag: %w", err)
 	}
+	if noSecret {
+		return "", nil
+	}
 
-	var secretSource io.Reader
-	switch {
-	case noSecret:
-		secretSource = bytes.NewReader(nil)
+	secretSourceName, err := cmd.Flags().GetString("secret-from")
+	if err != nil {
+		return "", fmt.Errorf("getting secret-from flag: %w", err)
+	}
 
-	case secretSourceName == "-":
-		secretSource = os.Stdin
-
-	default:
+	if secretSourceName != "" && secretSourceName != "-" {
 		f, err := os.Open(secretSourceName) //#nosec:G304 // Opening user specified file is intended
 		if err != nil {
 			return "", fmt.Errorf("opening secret-from file: %w", err)
 		}
-		defer f.Close() //nolint:errcheck // The file will be force-closed by program exit
-		secretSource = f
+		defer f.Close() //nolint:errcheck // Short-lived fd-leak
+		secretContent, err := io.ReadAll(f)
+		if err != nil {
+			return "", fmt.Errorf("reading secret-from file: %w", err)
+		}
+		return strings.TrimSpace(string(secretContent)), nil
 	}
 
-	secretContent, err := io.ReadAll(secretSource)
+	// Handled secret-from "-" (STDIN)
+	stat, err := os.Stdin.Stat()
+	isTerminal := (err == nil && (stat.Mode()&os.ModeCharDevice) != 0)
+
+	files, _ := cmd.Flags().GetStringSlice("file")
+	if isTerminal && len(files) > 0 && !cmd.Flags().Changed("secret-from") {
+		// Terminal environment with attachment files and no explicit note argument/flag:
+		// Default to file-only secret without blocking on terminal input.
+		return "", nil
+	}
+
+	if isTerminal {
+		fmt.Print("Enter secret note content: ")
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			return strings.TrimSpace(scanner.Text()), nil
+		}
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("reading interactive note input: %w", err)
+		}
+		return "", nil
+	}
+
+	// Non-terminal STDIN (e.g. piped input `echo "note" | ots-cli create`)
+	secretContent, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return "", fmt.Errorf("reading secret content: %w", err)
+		return "", fmt.Errorf("reading secret content from stdin: %w", err)
 	}
 
 	return strings.TrimSpace(string(secretContent)), nil

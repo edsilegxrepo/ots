@@ -8,7 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"github.com/Luzifer/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 type (

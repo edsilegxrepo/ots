@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,7 +30,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Luzifer/go-openssl/v4"
 	"github.com/sirupsen/logrus"
 )
 
@@ -48,15 +46,6 @@ type (
 // HTTPClient defines the client to use for create and fetch requests
 // and can be overwritten to provide authentication
 var HTTPClient HTTPClientIntf = http.DefaultClient
-
-// KeyDerivationFunc defines the key derivation algorithm used in OTS
-// to derive the key / iv from the password for encryption. You only
-// should change this if you are running an OTS instance with modified
-// parameters.
-//
-// The corresponding settings are found in `/src/crypto.js` in the OTS
-// source code.
-var KeyDerivationFunc = openssl.NewPBKDF2Generator(sha512.New, 300000) //nolint:mnd // that's the definition
 
 // Logger can be set to enable logging from the library. By default
 // all log-messages will be discarded.

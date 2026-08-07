@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Luzifer/ots/pkg/auth"
+	"github.com/edsilegxrepo/ots/pkg/auth"
 )
 
 func TestUserCLICommands(t *testing.T) {
