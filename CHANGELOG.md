@@ -17,6 +17,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - **Memcached Distributed Engine (`pkg/storage/memcached`):** Integrated 100% pure Go `github.com/bradfitz/gomemcache` driver with Compare-And-Set (CAS) atomic read-and-destroy semantics.
   - **SQLite Relational Engine (`pkg/storage/sqlite`):** Integrated 100% CGO-free `modernc.org/sqlite` pure Go driver (`sqlite:///path/to/ots.db` or `sqlite://:memory:`) with WAL journal mode, busy timeouts, and background expiration cleanup ticker.
   - **BadgerDB LSM Engine (`pkg/storage/badger`):** Integrated 100% CGO-free `github.com/dgraph-io/badger/v4` high-performance log-structured merge-tree database (`badger:///path/to/db`) utilizing native entry TTL expiration (`WithTTL`) and ACID value log garbage collection.
+- **UI Supported Extensions Badge Display (`src/components/create.vue`):**
+  - Rendered monospaced extension badges (`.png`, `.jpg`, `.pdf`, `.zip`, etc.) under `Attach Files:` next to `Maximum size`, automatically resolving pre-expanded group aliases (`@images`, `@office`, `@security`) with multi-line flex wrapping.
 
 ---
 

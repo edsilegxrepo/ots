@@ -1,9 +1,25 @@
-// Package sqlite implements the OTS storage.Storage interface for a pure Go CGO-free SQLite backend
+// Package sqlite implements the OTS storage.Storage interface backed by a 100% pure Go, CGO-free SQLite database.
+//
+// Objectives:
+// - Provide lightweight, zero-dependency embedded file or in-memory persistence for secrets.
+// - Ensure high-concurrency safety using WAL journal mode, busy timeouts, and SQL transactions.
+// - Automatically purge expired secrets via a background periodic cleanup ticker.
+//
+// Core Components:
+// - Storage: Encapsulating database handle (*sql.DB), cleanup ticker stop channel, and close sync.Once.
+// - New: Parses connection URIs ("sqlite:///path/to/ots.db" or "sqlite://:memory:"), initializes WAL mode, and creates table schemas.
+// - Create, ReadAndDestroy, Delete, CleanupExpired: Perform atomic CRUD operations and read-and-destroy one-time access semantics.
+//
+// Data Flow:
+// 1. New() -> Open modernc.org/sqlite DB -> Enable WAL & busy_timeout -> CREATE TABLE IF NOT EXISTS secrets.
+// 2. Create() -> Insert secret with calculated expires_at and requested_reads count.
+// 3. ReadAndDestroy() -> BeginTx -> SELECT secret & remaining reads -> Decrement reads or DELETE if final read -> Commit.
 package sqlite
 
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -45,7 +61,7 @@ func New(connStr string) (*Storage, error) {
 
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sqlite open database: %w", err)
 	}
 
 	db.SetMaxOpenConns(10)
@@ -68,7 +84,7 @@ func New(connStr string) (*Storage, error) {
 	`
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, fmt.Errorf("sqlite init schema: %w", err)
 	}
 
 	s := &Storage{
@@ -87,7 +103,10 @@ func (s *Storage) Close() error {
 	s.closeOnce.Do(func() {
 		close(s.stopChan)
 	})
-	return s.db.Close()
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("sqlite close db: %w", err)
+	}
+	return nil
 }
 
 func (s *Storage) startExpirationTicker() {
@@ -111,7 +130,7 @@ func (s *Storage) Count() (int64, error) {
 	var count int64
 	err := s.db.QueryRow("SELECT COUNT(*) FROM secrets WHERE expires_at = 0 OR expires_at >= ?;", now).Scan(&count)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("sqlite count query: %w", err)
 	}
 	return count, nil
 }
@@ -131,7 +150,7 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 	query := "INSERT INTO secrets (id, secret, reads, expires_at) VALUES (?, ?, ?, ?);"
 	_, err := s.db.Exec(query, id, secret, reads, expiresAt)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sqlite insert secret: %w", err)
 	}
 
 	return id, nil
@@ -144,7 +163,7 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("sqlite begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -161,7 +180,7 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 		if err == sql.ErrNoRows {
 			return "", 0, storage.ErrSecretNotFound
 		}
-		return "", 0, err
+		return "", 0, fmt.Errorf("sqlite scan row: %w", err)
 	}
 
 	// Check expiration
@@ -176,17 +195,17 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 	if readsRemaining <= 0 {
 		_, err = tx.ExecContext(ctx, "DELETE FROM secrets WHERE id = ?;", id)
 		if err != nil {
-			return "", 0, err
+			return "", 0, fmt.Errorf("sqlite delete secret: %w", err)
 		}
 	} else {
 		_, err = tx.ExecContext(ctx, "UPDATE secrets SET reads = ? WHERE id = ?;", readsRemaining, id)
 		if err != nil {
-			return "", 0, err
+			return "", 0, fmt.Errorf("sqlite update remaining reads: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("sqlite commit transaction: %w", err)
 	}
 
 	return secret, readsRemaining, nil

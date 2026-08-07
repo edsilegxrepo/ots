@@ -1,4 +1,20 @@
-// Package factory provides a unified constructor for initializing OTS storage providers
+// Package factory provides a unified constructor for instantiating pluggable OTS secret storage backends based on connection URI schemes.
+//
+// Objectives:
+// - Decouple storage engine creation from main server logic and prevent Go import cycles.
+// - Support pluggable storage engine schemes (memory://, redis://, memcached://, sqlite://, badger://).
+// - Fallback safely to in-memory storage when no URI scheme is specified.
+//
+// Core Components:
+// - CreateStorageEngine: Parses connection URI strings and delegates instantiation to sub-packages.
+//
+// Data Flow:
+// 1. CreateStorageEngine(storageURL) -> Inspect scheme prefix.
+// 2. memory:// -> Return memory.New()
+// 3. redis:// -> Return redis.New(storageURL)
+// 4. memcached:// -> Return memcached.New(storageURL)
+// 5. sqlite:// -> Return sqlite.New(storageURL)
+// 6. badger:// -> Return badger.New(storageURL)
 package factory
 
 import (

@@ -37,8 +37,12 @@ graph TD
 
     subgraph "Storage Abstraction Layer"
         StoreIntf["Storage Interface<br/>(pkg/storage/storage.go)"]
+        StoreFactory["Unified Storage Engine Factory<br/>(pkg/storage/factory)"]
         MemEngine["In-Memory Store<br/>(pkg/storage/memory)"]
         RedisEngine["Redis KV Store<br/>(pkg/storage/redis)"]
+        MemcachedEngine["Memcached CAS Store<br/>(pkg/storage/memcached)"]
+        SQLiteEngine["Pure Go SQLite Engine<br/>(pkg/storage/sqlite)"]
+        BadgerEngine["BadgerDB LSM Engine<br/>(pkg/storage/badger)"]
     end
 
     WebUI -->|"POST /api/create (Encrypted)"| TLS
@@ -149,6 +153,10 @@ graph TD
         MetricsModule["pkg/metrics<br/>(Prometheus Telemetry)"]
         StorageMem["pkg/storage/memory<br/>(In-Memory Store)"]
         StorageRedis["pkg/storage/redis<br/>(Redis Distributed Store)"]
+        StorageMemcached["pkg/storage/memcached<br/>(Memcached Distributed Store)"]
+        StorageSQLite["pkg/storage/sqlite<br/>(Pure Go SQLite Engine)"]
+        StorageBadger["pkg/storage/badger<br/>(BadgerDB LSM Engine)"]
+        StorageFactory["pkg/storage/factory<br/>(Unified Engine Factory)"]
     end
 
     subgraph "Third-Party Libraries"
@@ -156,6 +164,9 @@ graph TD
         OpenSSL["github.com/Luzifer/go-openssl/v4<br/>(PBKDF2 / AES Derivation)"]
         Prometheus["github.com/prometheus/client_golang<br/>(Metrics v1.24.1)"]
         GoRedis["github.com/redis/go-redis/v9<br/>(Redis Client v9.21.0)"]
+        SQLiteDriver["modernc.org/sqlite<br/>(Pure Go CGO-Free SQLite v1.41.0)"]
+        BadgerDriver["github.com/dgraph-io/badger/v4<br/>(BadgerDB LSM v4.6.0)"]
+        MemcachedDriver["github.com/bradfitz/gomemcache<br/>(Memcached Client v1.0.0)"]
         Logrus["github.com/sirupsen/logrus<br/>(Structured Logging v1.9.4)"]
         UUID["github.com/gofrs/uuid<br/>(UUID Generator v4.4.0)"]
         Testify["github.com/stretchr/testify<br/>(Testing Toolkit v1.11.1)"]
@@ -166,8 +177,15 @@ graph TD
     MainModule --> UUID
     MainModule --> CustModule
     MainModule --> MetricsModule
-    MainModule --> StorageMem
-    MainModule --> StorageRedis
+    MainModule --> StorageFactory
+    StorageFactory --> StorageMem
+    StorageFactory --> StorageRedis
+    StorageFactory --> StorageMemcached
+    StorageFactory --> StorageSQLite
+    StorageFactory --> StorageBadger
+    StorageSQLite --> SQLiteDriver
+    StorageBadger --> BadgerDriver
+    StorageMemcached --> MemcachedDriver
 
     ClientModule --> OpenSSL
     ClientModule --> Logrus

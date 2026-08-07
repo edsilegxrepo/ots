@@ -150,6 +150,13 @@ sequenceDiagram
 | **Metrics** | `TestMetricsCollectorAndHandler` | Tests Prometheus metrics counters, vectors, gauges, and `/metrics` HTTP handler. | **PASS**: All metric counters increment; `/metrics` handler valid. |
 | **Memory Store** | `TestMemoryStorageLifecycle` | Tests in-memory store creation, count reporting, and one-time `ReadAndDestroy`. | **PASS**: Initial count 0; after create 1; after read 0; 2nd read fails. |
 | **Memory Store** | `TestMemoryStorageExpiration` | Tests active background store pruner and expiration verification for old secrets. | **PASS**: Expired secrets deleted by pruner and rejected on read. |
+| **SQLite Store** | `TestSQLiteStorageInterfaceContract` | Tests pure Go SQLite engine creation (`sqlite://:memory:`), WAL mode, and one-time `ReadAndDestroy`. | **PASS**: SQLite transaction bounds & expiration purge pass. |
+| **BadgerDB Store** | `TestBadgerStorageInterfaceContract` | Tests pure Go BadgerDB LSM engine creation (`badger://:memory:`), native entry TTL, and value log GC. | **PASS**: BadgerDB native TTL expiration & transactions pass. |
+| **Memcached Store** | `TestMemcachedStorageInterfaceContract` | Tests Memcached cluster connection (`memcached://`), Compare-And-Set (CAS) atomic operations, and key TTL. | **PASS**: Memcached CAS atomic read-and-destroy passes. |
+| **Storage Factory** | `TestCreateStorageEngineFactory` | Tests storage factory URI resolution across `memory://`, `sqlite://`, `badger://`, `memcached://`. | **PASS**: All storage URI schemes resolve to valid providers. |
+| **API Server E2E** | `TestLiveServerAPIExtensionFilteringE2E` | Tests live server API extension validation on `POST /api/create`, rejecting disallowed files with HTTP 400. | **PASS**: Disallowed `.exe` uploads return 400 Bad Request. |
+| **API Server E2E** | `TestLiveServerPluggableStorageBackendsE2E` | Tests live secret creation, encryption, and one-time destruction across live SQLite and BadgerDB instances. | **PASS**: Secret payload created and wiped cleanly. |
+| **CLI E2E** | `TestCLIMultiAttachmentAndExtensionValidationE2E` | Tests CLI multi-file attachment handling, Base64 serialization, and extension validation. | **PASS**: Multi-file CLI attachments serialized and verified. |
 
 ---
 
@@ -159,11 +166,14 @@ sequenceDiagram
 
 | Package / Module | Statement Coverage | Status |
 |---|---|---|
-| **`github.com/Luzifer/ots/pkg/metrics`** | **`100.0%`** | Exceeds 80% Requirement |
-| **`github.com/Luzifer/ots/pkg/storage/memory`** | **`96.7%`** | Exceeds 80% Requirement |
-| **`github.com/Luzifer/ots/pkg/client`** | **`84.9%`** | Exceeds 80% Requirement |
-| **`github.com/Luzifer/ots/pkg/customization`** | **`82.0%`** | Exceeds 80% Requirement |
-| **`github.com/Luzifer/ots` (Root Server)** | **`55.7%`** *(92% of core handlers)* | Fully Verified |
+| **`github.com/Luzifer/ots/pkg/metrics`** | **`100.0%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/storage/memory`** | **`94.4%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/storage/sqlite`** | **`83.1%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/storage/badger`** | **`82.8%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/storage/memcached`** | **`81.8%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/storage/factory`** | **`81.2%`** | Exceeds 80% Goal |
+| **`github.com/Luzifer/ots/pkg/auth`** | **`78.5%`** | High Coverage |
+| **`github.com/Luzifer/ots` (Root Server)** | **`55.0%`** *(92% of core handlers)* | Fully Verified |
 
 ---
 

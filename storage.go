@@ -8,14 +8,9 @@ import (
 )
 
 func getStorageByType(t string) (storage.Storage, error) {
-	switch t {
-	case "mem":
-		return factory.CreateStorageEngine("memory://")
-
-	case "redis":
-		return factory.CreateStorageEngine("redis://")
+	if t == "mem" {
+		t = "memory://"
 	}
-
 	s, err := factory.CreateStorageEngine(t)
 	if err != nil {
 		return nil, fmt.Errorf("creating storage engine for %q: %w", t, err)

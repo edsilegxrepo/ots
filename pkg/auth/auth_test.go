@@ -101,6 +101,53 @@ func TestLocalArgon2idAuthenticator(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidCredentials)
 		assert.Nil(t, identity)
 	})
+
+	t.Run("User Management Operations", func(t *testing.T) {
+		// Add disabled user
+		err := la.AddUser(UserRecord{
+			Username: "disabled_user",
+			Hash:     passHash,
+			Disabled: true,
+		})
+		require.NoError(t, err)
+
+		// Update existing user
+		err = la.AddUser(UserRecord{
+			Username: "disabled_user",
+			Hash:     passHash,
+			Disabled: true,
+		})
+		require.NoError(t, err)
+
+		// List users
+		users := la.ListUsers()
+		require.Len(t, users, 2)
+
+		// Authenticate disabled user returns ErrUserDisabled
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
+		req.SetBasicAuth("disabled_user", "SuperSecret123!")
+		_, err = la.AuthenticateBasic(req)
+		require.ErrorIs(t, err, ErrUserDisabled)
+
+		// Authenticate non-existent user returns ErrUserNotFound
+		req.SetBasicAuth("unknown_user", "SuperSecret123!")
+		_, err = la.AuthenticateBasic(req)
+		require.ErrorIs(t, err, ErrUserNotFound)
+
+		// Delete user
+		err = la.DeleteUser("bob")
+		require.NoError(t, err)
+
+		// SaveUsers error on empty path
+		emptyLA := &LocalAuthenticator{}
+		require.Error(t, emptyLA.SaveUsers())
+		require.NoError(t, emptyLA.loadUsersLocked())
+	})
+
+	t.Run("Argon2id Verification Failures", func(t *testing.T) {
+		assert.False(t, VerifyPassword("any", "invalid_argon_string"))
+		assert.False(t, VerifyPassword("any", "$argon2id$v=19$m=65536,t=3,p=2$invalid_b64_salt$invalid_b64_hash"))
+	})
 }
 
 func TestRBACEvaluator(t *testing.T) {
@@ -142,4 +189,79 @@ iam:
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, "forwardauth", cfg.Connector)
 	assert.Equal(t, []string{"DevOps"}, cfg.Policy.AllowedGroups)
+}
+
+func TestAuthMiddleware(t *testing.T) {
+	cfg := IAMConfig{
+		Enabled:            true,
+		Connector:          "forwardauth",
+		ProtectedEndpoints: []string{"/api/create"},
+		Policy: IAMPolicy{
+			DefaultPolicy: "deny",
+			AllowedGroups: []string{"DevOps"},
+		},
+		Connectors: IAMConnectors{
+			ForwardAuth: ForwardAuthConfig{
+				Enabled:         true,
+				UserHeader:      "Remote-User",
+				GroupsHeader:    "Remote-Groups",
+				HeaderDelimiter: ",",
+				TrustedProxies:  []string{"127.0.0.1"},
+			},
+		},
+	}
+
+	am, err := NewAuthMiddleware(cfg, nil)
+	require.NoError(t, err)
+
+	handler := am.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := GetUserIdentity(r)
+		if id != nil {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(id.Username))
+		} else {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("anonymous"))
+		}
+	}))
+
+	t.Run("Unprotected Endpoint Pass-Through", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/healthz", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "anonymous", rec.Body.String())
+	})
+
+	t.Run("Protected Authorized Request", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		req.Header.Set("Remote-User", "alice")
+		req.Header.Set("Remote-Groups", "DevOps")
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "alice", rec.Body.String())
+	})
+
+	t.Run("Protected Unauthenticated Request", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
+
+	t.Run("Protected Forbidden Request", func(t *testing.T) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/create", nil)
+		req.RemoteAddr = "127.0.0.1:12345"
+		req.Header.Set("Remote-User", "charlie")
+		req.Header.Set("Remote-Groups", "Guests")
+
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusForbidden, rec.Code)
+	})
 }

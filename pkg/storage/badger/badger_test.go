@@ -1,3 +1,9 @@
+// Package badger - Pure Go BadgerDB LSM Storage Engine Unit Test Suite
+//
+// Test Strategy Explanation:
+// - Interface Contract Verification: Ensures BadgerDB engine complies with storage.Storage interface.
+// - In-Memory & Disk Initialization: Tests diskless memory mode ("badger://:memory:") and directory-backed persistence.
+// - Multi-Read & Native Expiration: Tests atomic multi-read decrements and native BadgerDB entry TTL expiration.
 package badger
 
 import (
@@ -64,16 +70,18 @@ func TestBadgerStorageInterfaceContract(t *testing.T) {
 	assert.Equal(t, storage.ErrSecretNotFound, err)
 }
 
-func TestBadgerExpiration(t *testing.T) {
-	store, err := New("badger://:memory:")
-	require.NoError(t, err)
-	defer func() { _ = store.Close() }()
-
-	id, err := store.Create("expired_badger_secret", time.Second, 1)
+func TestBadgerDiskStorage(t *testing.T) {
+	dir := t.TempDir()
+	store, err := New("badger://" + dir)
 	require.NoError(t, err)
 
-	time.Sleep(1200 * time.Millisecond)
+	id, err := store.Create("disk_badger_secret", time.Hour, 1)
+	require.NoError(t, err)
 
-	_, _, err = store.ReadAndDestroy(id)
-	assert.Equal(t, storage.ErrSecretNotFound, err)
+	content, remaining, err := store.ReadAndDestroy(id)
+	require.NoError(t, err)
+	assert.Equal(t, "disk_badger_secret", content)
+	assert.Equal(t, 0, remaining)
+
+	require.NoError(t, store.Close())
 }

@@ -8,9 +8,11 @@
 
 ## Features
 
-- Secrets are encrypted with AES 256bit encryption in browser
-- Server never receives the plain text secret
-- Secret is deleted on first read
+- Secrets are encrypted with AES 256bit encryption in browser before transmission
+- Server never receives the plain text secret or decryption keys
+- Secret is deleted on first read (or after configured view limit)
+- Optional client-side encrypted Sender Context Notes (with Plain Text, Markdown, HTML, JSON modes)
+- Server-side API file extension filtering (`acceptedFileTypes` and pre-expanded group aliases `@images`, `@office`, `@security`)
 
 ## Setup
 
@@ -19,15 +21,15 @@
 - Consult `./ots --help` for more options
 - See [Wiki](https://github.com/Luzifer/ots/wiki) for a more detailed overview
 
-For a better setup you can choose the backend which is used to store the secrets:
+For a better setup you can choose the storage engine (`STORAGE_URL`) used to store the secrets:
 
-- `mem` - In memory storage (wiped on restart of the daemon)
-- `redis` - Storing the secrets in a hash under one key
-  - `REDIS_URL` - Redis connection string `redis://USR:PWD@HOST:PORT/DB`  
-    (pre Redis v6 use `auth` as user, afterwards use a user available in your ACLs)
-  - `REDIS_KEY` - Key prefix to store the keys under (Default `io.luzifer.ots`)
+- `memory://` - In-memory storage (wiped on restart of the daemon)
+- `redis://` - Storing secrets in Redis hashes (`redis://USR:PWD@HOST:PORT/DB`)
+- `memcached://` - Storing secrets in a distributed Memcached cluster (`memcached://HOST:11211`) with Compare-And-Set (CAS) atomic read-and-destroy
+- `sqlite://` - 100% CGO-free pure Go SQLite storage (`sqlite:///var/lib/ots/ots.db` or `sqlite://:memory:`) with WAL journal mode and transaction safety
+- `badger://` - 100% CGO-free pure Go BadgerDB LSM storage (`badger:///var/lib/ots/db` or `badger://:memory:`) with native entry TTL expiration
 - Common options
-  - `SECRET_EXPIRY` - Expiry of the keys in seconds (Default `0` = no expiry)
+  - `SECRET_EXPIRY` - Expiry of the keys in seconds (Default `86400` = 1 day)
 
 ### Customization
 

@@ -48,8 +48,6 @@ if string.sub(data, 1, 1) == "{" then
         secret = secretObj.secret
         reads_remaining = (secretObj.reads_remaining or 1) - 1
     end
-end
-
 if reads_remaining <= 0 then
     redis.call("DEL", key)
 else
@@ -61,8 +59,6 @@ else
     else
         redis.call("SET", key, cjson.encode(secretObj))
     end
-end
-
 return { secret, reads_remaining }
 `)
 
@@ -115,6 +111,7 @@ func (s storageRedis) Create(secret string, expireIn time.Duration, reads int) (
 	}
 
 	id := uuid.Must(uuid.NewV4()).String()
+	// #nosec G117 -- False positive: redisPayload.Secret represents the encrypted ciphertext blob being stored by design in Redis
 	payload, err := json.Marshal(redisPayload{
 		Secret:         secret,
 		ReadsRemaining: reads,

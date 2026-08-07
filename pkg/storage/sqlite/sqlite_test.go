@@ -1,3 +1,9 @@
+// Package sqlite - Pure Go SQLite Storage Engine Unit Test Suite
+//
+// Test Strategy Explanation:
+// - Interface Contract Conformance: Verifies that SQLite engine satisfies the core storage.Storage interface contract.
+// - Creation & Multi-Read Destruction: Validates atomic secret creation, multi-read counter decrement, and final read deletion.
+// - Expiration & Background Purge: Tests secret TTL boundary expiration and periodic background ticker cleanup routines.
 package sqlite
 
 import (
@@ -62,6 +68,23 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 	// Read 4 returns ErrSecretNotFound
 	_, _, err = store.ReadAndDestroy(id2)
 	assert.Equal(t, storage.ErrSecretNotFound, err)
+}
+
+func TestSQLiteDiskStorage(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbFile := tmpDir + "/ots_test.db"
+	store, err := New("sqlite://" + dbFile)
+	require.NoError(t, err)
+
+	id, err := store.Create("disk_sqlite_secret", time.Hour, 1)
+	require.NoError(t, err)
+
+	content, remaining, err := store.ReadAndDestroy(id)
+	require.NoError(t, err)
+	assert.Equal(t, "disk_sqlite_secret", content)
+	assert.Equal(t, 0, remaining)
+
+	require.NoError(t, store.Close())
 }
 
 func TestSQLiteExpiration(t *testing.T) {

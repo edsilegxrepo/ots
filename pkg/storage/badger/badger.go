@@ -1,8 +1,24 @@
-﻿// Package badger implements the OTS storage.Storage interface for a BadgerDB LSM-tree backend with native TTL support
+// Package badger implements the OTS storage.Storage interface backed by BadgerDB v4 LSM-tree key-value store.
+//
+// Objectives:
+// - Provide high-performance embedded disk or in-memory persistence using log-structured merge trees.
+// - Leverage BadgerDB's native entry-level TTL expiration (WithTTL) and ACID transactions.
+// - Periodically trigger value log garbage collection (RunValueLogGC) to maintain optimal disk space utilization.
+//
+// Core Components:
+// - Storage: Wraps *badgerdb.DB instance, close sync.Once, and background GC ticker.
+// - badgerSecretEntry: Internal JSON struct encapsulating secret payload, expiry timestamp, and remaining reads.
+// - New, Create, ReadAndDestroy, Delete, CleanupExpired: Implements atomic one-time secret operations.
+//
+// Data Flow:
+// 1. New() -> Open badgerdb.DefaultOptions (in-memory or disk path) -> Start background GC ticker.
+// 2. Create() -> Marshal badgerSecretEntry -> db.Update Tx -> SetEntry with WithTTL(expireIn).
+// 3. ReadAndDestroy() -> db.Update Tx -> Get item -> Unmarshal entry -> Decrement remaining reads or Delete -> Commit.
 package badger
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -209,7 +225,7 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 		return "", 0, storage.ErrSecretNotFound
 	}
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("badger update transaction: %w", err)
 	}
 
 	return content, readsRemaining, nil

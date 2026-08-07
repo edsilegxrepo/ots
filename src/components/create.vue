@@ -487,6 +487,11 @@ export default defineComponent({
 			return this.customize.acceptedFileTypes || "";
 		},
 
+		/**
+		 * supportedExtensionsList resolves the array of allowed extension strings (.png, .pdf, .zip)
+		 * to display as badge pills in the file attachment section. It prioritizes server-pre-expanded
+		 * resolvedAcceptedExtensions and falls back to splitting raw acceptedFileTypes string.
+		 */
 		supportedExtensionsList(): string[] {
 			if (
 				Array.isArray((this.customize as any).resolvedAcceptedExtensions) &&
