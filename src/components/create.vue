@@ -25,10 +25,18 @@
   >
     <!-- Safe: Trusted internal translation string from i18n.yaml -->
     <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-    <div
-      class="card-header bg-primary-subtle"
-      v-html="$t('title-new-secret')"
-    />
+    <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+      <span v-html="$t('title-new-secret')" />
+      <button
+        type="button"
+        class="btn btn-sm shadow-sm"
+        :class="senderNote ? 'btn-success' : 'btn-outline-primary'"
+        @click="openMessageModal"
+      >
+        <i :class="senderNote ? 'fas fa-check-circle me-1' : 'fas fa-envelope-open-text me-1'" />
+        {{ senderNote ? $t('btn-edit-sender-message') : $t('btn-sender-message') }}
+      </button>
+    </div>
     <div class="card-body">
       <!-- Safe: Administrator configured custom banner HTML in customize.yaml -->
       <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
@@ -162,15 +170,151 @@
       </form>
     </div>
   </div>
+
+  <!-- Sender Context Message Modal -->
+  <div
+    v-if="showMessageModal"
+    class="modal fade show d-block"
+    tabindex="-1"
+    style="background-color: rgba(0, 0, 0, 0.5);"
+    @click.self="closeMessageModal"
+  >
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content shadow-lg">
+        <div class="modal-header bg-primary-subtle">
+          <h5 class="modal-title">
+            <i class="fas fa-envelope-open-text me-2 text-primary" />
+            {{ $t('title-sender-message-modal') }}
+          </h5>
+          <button
+            type="button"
+            class="btn-close"
+            @click="closeMessageModal"
+          />
+        </div>
+        <div class="modal-body">
+          <!-- Format Selector Pills -->
+          <div class="mb-3">
+            <label class="form-label fw-bold small text-uppercase text-secondary me-3">
+              {{ $t('label-message-format') }}
+            </label>
+            <div class="btn-group" role="group">
+              <button
+                type="button"
+                class="btn btn-sm"
+                :class="draftMessageFormat === 'text' ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setFormatMode('text')"
+              >
+                <i class="fas fa-file-alt me-1" /> Plain Text
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm"
+                :class="draftMessageFormat === 'md' ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setFormatMode('md')"
+              >
+                <i class="fab fa-markdown me-1" /> Markdown
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm"
+                :class="draftMessageFormat === 'html' ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setFormatMode('html')"
+              >
+                <i class="fas fa-code me-1" /> HTML
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm"
+                :class="draftMessageFormat === 'json' ? 'btn-primary' : 'btn-outline-secondary'"
+                @click="setFormatMode('json')"
+              >
+                <i class="fas fa-brackets-curly me-1" /> JSON
+              </button>
+            </div>
+          </div>
+
+          <!-- Note Textarea -->
+          <div class="mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="d-flex align-items-center gap-2">
+                <label for="modalSenderNoteInput" class="form-label mb-0">
+                  {{ $t('label-message-text') }}
+                </label>
+                <button
+                  type="button"
+                  class="btn btn-link btn-sm p-0 text-decoration-none small"
+                  @click="insertFormatTemplate"
+                >
+                  <i class="fas fa-wand-magic-sparkles me-1" /> Sample Template
+                </button>
+              </div>
+              <small
+                class="fw-semibold"
+                :class="{
+                  'text-muted': draftSenderNote.length < 180,
+                  'text-warning': draftSenderNote.length >= 180 && draftSenderNote.length < 200,
+                  'text-danger': draftSenderNote.length >= 200
+                }"
+              >
+                {{ draftSenderNote.length }} / 200
+              </small>
+            </div>
+            <textarea
+              id="modalSenderNoteInput"
+              v-model="draftSenderNote"
+              class="form-control font-monospace"
+              rows="4"
+              maxlength="200"
+              placeholder="Add a context note (e.g. Ticket #402, Staging DB credentials)..."
+            />
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-between">
+          <button
+            type="button"
+            class="btn btn-outline-danger btn-sm"
+            @click="clearMessageModal"
+          >
+            <i class="fas fa-trash me-1" /> {{ $t('btn-clear-message') }}
+          </button>
+          <div>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm me-2"
+              @click="closeMessageModal"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              @click="saveMessageModal"
+            >
+              <i class="fas fa-check me-1" /> {{ $t('btn-save-message') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script lang="ts">
+import DOMPurify from "dompurify";
 import { defineComponent } from "vue";
 import appCrypto from "../crypto.ts";
 import { bytesToHuman } from "../helpers";
 import OTSMeta from "../ots-meta";
 import FilesDisplay from "./fileDisplay.vue";
 import GrowArea from "./growarea.vue";
+
+const defaultFormatTemplates: Record<string, string> = {
+	text: "Ticket #402 - Staging DB Credentials",
+	md: "**Ticket**: #402\n**Environment**: Staging\n- *Note*: Valid for 24h",
+	html: "<div><strong>Ticket:</strong> #402</div>\n<div><em>Environment:</em> Staging</div>",
+	json: `{\n  "ticket": "#402",\n  "environment": "staging"\n}`,
+};
 
 const defaultExpiryChoices = [
 	90 * 86400, // 90 days
@@ -339,12 +483,17 @@ export default defineComponent({
 			attachedFiles: [],
 			canWrite: null,
 			createRunning: false,
+			draftMessageFormat: "text",
+			draftSenderNote: "",
 			fileSize: 0,
 			secret: "",
 			securePassword: null,
 			selectedExpiry: null,
 			selectedFileMeta: [],
 			selectedReads: 1,
+			senderMessageFormat: "text",
+			senderNote: "",
+			showMessageModal: false,
 		};
 	},
 
@@ -352,6 +501,76 @@ export default defineComponent({
 
 	methods: {
 		bytesToHuman,
+
+		openMessageModal(): void {
+			this.draftSenderNote = this.senderNote;
+			this.draftMessageFormat = this.senderMessageFormat || "text";
+			if (!this.draftSenderNote && defaultFormatTemplates[this.draftMessageFormat]) {
+				this.draftSenderNote = defaultFormatTemplates[this.draftMessageFormat];
+			}
+			this.showMessageModal = true;
+		},
+
+		setFormatMode(fmt: string): void {
+			const isTemplateOrEmpty =
+				!this.draftSenderNote ||
+				Object.values(defaultFormatTemplates).includes(this.draftSenderNote.trim());
+
+			this.draftMessageFormat = fmt;
+
+			if (isTemplateOrEmpty && defaultFormatTemplates[fmt]) {
+				this.draftSenderNote = defaultFormatTemplates[fmt];
+			}
+		},
+
+		insertFormatTemplate(): void {
+			if (defaultFormatTemplates[this.draftMessageFormat]) {
+				this.draftSenderNote = defaultFormatTemplates[this.draftMessageFormat];
+			}
+		},
+
+		closeMessageModal(): void {
+			this.showMessageModal = false;
+		},
+
+		clearMessageModal(): void {
+			this.draftSenderNote = "";
+		},
+
+		saveMessageModal(): void {
+			const rawNote = this.draftSenderNote.trim().slice(0, 200);
+
+			// Discard note if empty or matches an unmodified default template
+			const isUnmodifiedTemplate = Object.values(defaultFormatTemplates).includes(rawNote);
+			if (!rawNote || isUnmodifiedTemplate) {
+				this.senderNote = "";
+				this.showMessageModal = false;
+				return;
+			}
+
+			if (this.draftMessageFormat === "html" || this.draftMessageFormat === "md") {
+				this.senderNote = DOMPurify.sanitize(rawNote, {
+					ADD_ATTR: ["target"],
+					ALLOWED_ATTR: ["href", "title", "target", "rel", "class"],
+					ALLOWED_TAGS: [
+						"div", "span", "p", "strong", "b", "em", "i", "u", "code", "pre",
+						"ul", "ol", "li", "br", "hr", "a", "table", "thead", "tbody", "tr",
+						"th", "td", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"
+					],
+					ALLOW_DATA_ATTR: false,
+					FORBID_ATTR: ["style", "onerror", "onload", "onclick", "onmouseover"],
+					FORBID_TAGS: [
+						"script", "style", "iframe", "object", "embed", "form", "input",
+						"button", "select", "option", "meta", "link", "base", "svg", "math"
+					],
+				});
+			} else {
+				this.senderNote = rawNote;
+			}
+
+			this.senderMessageFormat = this.draftMessageFormat;
+			this.showMessageModal = false;
+		},
 
 		checkWriteAccess(): Promise<void> {
 			return fetch("/api/isWritable", {
@@ -403,6 +622,10 @@ export default defineComponent({
 
 			const meta = new OTSMeta();
 			meta.secret = this.secret;
+			if (this.senderNote) {
+				meta.message = this.senderNote;
+				meta.messageFormat = this.senderMessageFormat;
+			}
 
 			if (this.attachedFiles.length > 0) {
 				for (const f of this.attachedFiles) {

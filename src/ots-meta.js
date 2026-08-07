@@ -8,6 +8,12 @@ class OTSMeta {
   #files = [];
 
   /** @type String */
+  #message = "";
+
+  /** @type String */
+  #messageFormat = "text";
+
+  /** @type String */
   #secret = "";
 
   /** @type Number */
@@ -29,8 +35,10 @@ class OTSMeta {
 
     const data = JSON.parse(jsonString.replace(/^OTSMeta/, ""));
 
-    this.#secret = data.secret;
-    this.#version = data.v;
+    this.#secret = data.secret || "";
+    this.#message = data.message || "";
+    this.#messageFormat = data.messageFormat || "text";
+    this.#version = data.v || 1.0;
 
     for (const f of data.attachments || []) {
       const content = base64.toByteArray(f.data);
@@ -40,6 +48,23 @@ class OTSMeta {
 
   get files() {
     return this.#files;
+  }
+
+  get message() {
+    return this.#message;
+  }
+
+  set message(msg) {
+    this.#message = (msg || "").slice(0, 200);
+  }
+
+  get messageFormat() {
+    return this.#messageFormat;
+  }
+
+  set messageFormat(fmt) {
+    const valid = ["text", "md", "html", "json"];
+    this.#messageFormat = valid.includes(fmt) ? fmt : "text";
   }
 
   get secret() {
@@ -55,13 +80,15 @@ class OTSMeta {
    */
   serialize() {
     const output = {
+      message: this.#message,
+      messageFormat: this.#messageFormat,
       secret: this.#secret,
       v: this.#version,
     };
 
-    if (this.#files.length === 0) {
+    if (this.#files.length === 0 && !this.#message) {
       /*
-       * We got no attachments, therefore we do a simple fallback to
+       * We got no attachments and no message, therefore we do a simple fallback to
        * the old "just the secret"-format
        */
       return new Promise((resolve) => {

@@ -1,9 +1,18 @@
 <template>
   <div class="card border-primary-subtle mb-3">
     <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
-      <!-- Safe: Trusted internal translation string from i18n.yaml -->
-      <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-      <span v-html="$t('title-reading-secret')" />
+      <div class="d-flex align-items-center">
+        <!-- Safe: Trusted internal translation string from i18n.yaml -->
+        <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
+        <span v-html="$t('title-reading-secret')" />
+        <span
+          v-if="senderNote"
+          class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 ms-2"
+        >
+          <i class="fas fa-envelope me-1" />
+          {{ $t('text-message-received') }}
+        </span>
+      </div>
       <button
         v-if="secret || files.length > 0"
         class="btn btn-sm btn-outline-primary shadow-sm"
@@ -44,6 +53,32 @@
         </button>
       </template>
       <template v-else>
+        <!-- Sender Note Display Container -->
+        <div v-if="senderNote" class="card border-info-subtle mb-3 shadow-sm">
+          <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center py-2">
+            <span class="fw-semibold text-info-emphasis">
+              <i class="fas fa-envelope-open-text me-1" /> {{ $t('text-message-title') }}
+            </span>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-info text-dark rounded-pill px-3 py-2 font-monospace">{{ senderMessageFormat }}</span>
+              <app-clipboard-button
+                :content="senderNote"
+                :title="$t('tooltip-copy-note')"
+              />
+            </div>
+          </div>
+          <div class="card-body p-3">
+            <!-- Plain Text Format -->
+            <pre v-if="senderMessageFormat === 'text'" class="mb-0 font-monospace text-wrap bg-body-tertiary p-3 rounded border">{{ senderNote }}</pre>
+            
+            <!-- JSON Format -->
+            <pre v-else-if="senderMessageFormat === 'json'" class="mb-0 font-monospace text-wrap bg-dark text-light p-3 rounded border">{{ formattedJSONMessage }}</pre>
+
+            <!-- Markdown / HTML Format -->
+            <div v-else class="formatted-note-content p-2" v-html="renderedFormattedMessage" />
+          </div>
+        </div>
+
         <div
           v-if="secret"
           class="input-group mb-3"
@@ -94,6 +129,7 @@
 </template>
 
 <script lang="ts">
+import DOMPurify from "dompurify";
 import JSZip from "jszip";
 import { defineComponent } from "vue";
 import appCrypto from "../crypto.ts";
@@ -125,7 +161,56 @@ export default defineComponent({
 			secret: null as null | string,
 			secretContentBlobURL: null as null | string,
 			secretLoading: false,
+			senderMessageFormat: "text",
+			senderNote: "",
 		};
+	},
+
+	computed: {
+		formattedJSONMessage(): string {
+			if (!this.senderNote) return "";
+			try {
+				const parsed = JSON.parse(this.senderNote);
+				return JSON.stringify(parsed, null, 2);
+			} catch {
+				return this.senderNote;
+			}
+		},
+
+		renderedFormattedMessage(): string {
+			if (!this.senderNote) return "";
+
+			const purifyOptions = {
+				ADD_ATTR: ["target"],
+				ALLOWED_ATTR: ["href", "title", "target", "rel", "class"],
+				ALLOWED_TAGS: [
+					"div", "span", "p", "strong", "b", "em", "i", "u", "code", "pre",
+					"ul", "ol", "li", "br", "hr", "a", "table", "thead", "tbody", "tr",
+					"th", "td", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"
+				],
+				ALLOW_DATA_ATTR: false,
+				FORBID_ATTR: ["style", "onerror", "onload", "onclick", "onmouseover"],
+				FORBID_TAGS: [
+					"script", "style", "iframe", "object", "embed", "form", "input",
+					"button", "select", "option", "meta", "link", "base", "svg", "math"
+				],
+			};
+
+			if (this.senderMessageFormat === "md") {
+				const convertedMD = this.senderNote
+					.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+					.replace(/\*(.*?)\*/g, "<em>$1</em>")
+					.replace(/`(.*?)`/g, "<code class='bg-body-tertiary px-1 rounded'>$1</code>")
+					.replace(/\n/g, "<br>");
+				return DOMPurify.sanitize(convertedMD, purifyOptions);
+			}
+
+			if (this.senderMessageFormat === "html") {
+				return DOMPurify.sanitize(this.senderNote, purifyOptions);
+			}
+
+			return DOMPurify.sanitize(this.senderNote.replace(/\n/g, "<br>"), purifyOptions);
+		},
 	},
 
 	emits: ["error"],
@@ -154,6 +239,22 @@ export default defineComponent({
 					itemsToHash.push({
 						name: "secret.txt",
 						bytes: new TextEncoder().encode(this.secret),
+					});
+				}
+
+				// 2. Prepare sender context note (if present)
+				if (this.senderNote) {
+					let noteFilename = "note.txt";
+					if (this.senderMessageFormat === "md") {
+						noteFilename = "note.md";
+					} else if (this.senderMessageFormat === "html") {
+						noteFilename = "note.html";
+					} else if (this.senderMessageFormat === "json") {
+						noteFilename = "note.json";
+					}
+					itemsToHash.push({
+						name: noteFilename,
+						bytes: new TextEncoder().encode(this.senderNote),
 					});
 				}
 
@@ -245,6 +346,8 @@ export default defineComponent({
 							.then((secret) => {
 								const meta = new OTSMeta(secret);
 								this.secret = meta.secret;
+								this.senderNote = meta.message;
+								this.senderMessageFormat = meta.messageFormat || "text";
 
 								meta.files.forEach((file) => {
 									file.arrayBuffer().then((ab) => {
