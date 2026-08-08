@@ -2,12 +2,14 @@ package main
 
 import (
 	"compress/gzip"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/fs"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -195,4 +197,37 @@ func CSPSrcNonce(nonce string) string {
 
 func (c CSP) ToHeaderValue() string {
 	return c.String()
+}
+
+var byteBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 64*1024) // 64KB buffer pool
+		return &b
+	},
+}
+
+// DecodeBase64Pooled decodes input Base64 using a zero-allocation sync.Pool buffer
+func DecodeBase64Pooled(s string) ([]byte, error) {
+	bufPtr := byteBufferPool.Get().(*[]byte)
+	defer byteBufferPool.Put(bufPtr)
+
+	buf := *bufPtr
+	enc := base64.StdEncoding
+	if strings.Contains(s, "-") || strings.Contains(s, "_") {
+		enc = base64.RawURLEncoding
+	}
+
+	decodedLen := enc.DecodedLen(len(s))
+	if decodedLen > len(buf) {
+		return enc.DecodeString(s)
+	}
+
+	n, err := enc.Decode(buf[:decodedLen], []byte(s))
+	if err != nil {
+		return base64.URLEncoding.DecodeString(s)
+	}
+
+	res := make([]byte, n)
+	copy(res, buf[:n])
+	return res, nil
 }

@@ -49,7 +49,7 @@ func (o *Secret) read(data []byte, passphrase string) (err error) {
 	}
 
 	for i := range o.Attachments {
-		o.Attachments[i].Content, err = base64.StdEncoding.DecodeString(o.Attachments[i].Data)
+		o.Attachments[i].Content, err = decodeBase64Flexible(o.Attachments[i].Data)
 		if err != nil {
 			return fmt.Errorf("decoding attachment %d: %w", i, err)
 		}

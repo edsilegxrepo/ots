@@ -20,6 +20,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -88,9 +89,10 @@ func newAPI(s storage.Storage, c *metrics.Collector) *APIServer {
 	return NewAPI(s, c)
 }
 
-// Register attaches API endpoints (/create, /get/{id}, /settings, /isWritable, /healthz) to Gorilla Mux.
+// Register attaches API endpoints (/create, /create/raw, /get/{id}, /settings, /isWritable, /healthz) to Gorilla Mux.
 func (a *APIServer) Register(r *mux.Router) {
 	r.HandleFunc("/create", a.handleCreate)
+	r.HandleFunc("/create/raw", a.handleCreateRaw).Methods(http.MethodPost)
 	r.HandleFunc("/get/{id}", a.handleRead)
 	r.HandleFunc("/isWritable", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	r.HandleFunc("/settings", a.handleSettings).Methods(http.MethodGet)
@@ -218,14 +220,16 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	id, err := a.store.Create(secret, time.Duration(expiry)*time.Second, requestedReads)
+	payloadBytes := []byte(secret)
+
+	id, err := a.store.Create(payloadBytes, time.Duration(expiry)*time.Second, requestedReads)
 	if err != nil {
 		a.collector.CountSecretCreateError(errorReasonStorageError)
 		a.errorResponse(res, http.StatusInternalServerError, err, "creating secret")
 		return
 	}
 
-	a.storageBytes.Add(int64(len(secret)))
+	a.storageBytes.Add(int64(len(payloadBytes)))
 
 	var expiresAt *time.Time
 	if expiry > 0 {
@@ -241,6 +245,66 @@ func (a *apiServer) handleCreate(res http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleCreateRaw processes raw binary payload submissions (application/octet-stream) directly into storage.
+func (a *apiServer) handleCreateRaw(res http.ResponseWriter, r *http.Request) {
+	clientIP := getClientIP(r)
+	if !a.rateLimiter.Allow(clientIP) {
+		a.collector.CountSecretCreateError("rate_limit_exceeded")
+		a.errorResponse(res, http.StatusTooManyRequests, errors.New("rate limit exceeded"), "rate limit exceeded for "+clientIP)
+		return
+	}
+
+	expiry, err := a.parseExpiryOverride(r, cfg.SecretExpiry)
+	if err != nil {
+		a.collector.CountSecretCreateError(errorReasonInvalidExpiry)
+		a.errorResponse(res, http.StatusBadRequest, err, "parsing secret expiry")
+		return
+	}
+
+	maxReadSize := int64(64 * 1024 * 1024) // Default 64MB hard limit
+	if cust.MaxSecretSize > 0 {
+		maxReadSize = cust.MaxSecretSize
+	}
+
+	r.Body = http.MaxBytesReader(res, r.Body, maxReadSize)
+	payloadBytes, err := io.ReadAll(r.Body)
+	if err != nil || len(payloadBytes) == 0 {
+		a.collector.CountSecretCreateError(errorReasonSecretMissing)
+		a.errorResponse(res, http.StatusBadRequest, errors.New("raw payload missing or unreadable"), "")
+		return
+	}
+
+	if cust.MaxSecretSize > 0 && int64(len(payloadBytes)) > cust.MaxSecretSize {
+		a.collector.CountSecretCreateError(errorReasonSecretSize)
+		a.errorResponse(res, http.StatusBadRequest, errors.New("secret size exceeds maximum"), "")
+		return
+	}
+
+	if cust.MaxAttachmentSizeTotal > 0 {
+		currentBytes := a.storageBytes.Load()
+		if currentBytes+int64(len(payloadBytes)) > cust.MaxAttachmentSizeTotal {
+			a.collector.CountSecretCreateError(errorReasonSecretSize)
+			a.errorResponse(res, http.StatusInsufficientStorage, errors.New("total instance attachment storage limit reached"), "storage limit reached")
+			return
+		}
+	}
+
+	id, err := a.store.Create(payloadBytes, time.Duration(expiry)*time.Second, 1)
+	if err != nil {
+		a.collector.CountSecretCreateError(errorReasonStorageError)
+		a.errorResponse(res, http.StatusInternalServerError, err, "creating raw secret")
+		return
+	}
+
+	a.storageBytes.Add(int64(len(payloadBytes)))
+	a.collector.CountSecretCreated()
+
+	a.jsonResponse(res, http.StatusCreated, apiResponse{
+		Success:  true,
+		SecretID: id,
+	})
+}
+
 // handleRead retrieves and atomically destroys a stored secret by secret ID (one-time read).
 func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -250,7 +314,7 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret, readsRemaining, err := a.store.ReadAndDestroy(id)
+	payloadBytes, readsRemaining, err := a.store.ReadAndDestroy(id)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, storage.ErrSecretNotFound) {
@@ -264,14 +328,14 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 	}
 
 	if readsRemaining <= 0 {
-		a.storageBytes.Add(-int64(len(secret)))
+		a.storageBytes.Add(-int64(len(payloadBytes)))
 	}
 
 	a.collector.CountSecretRead()
 	a.jsonResponse(res, http.StatusOK, apiResponse{
 		ReadsRemaining: readsRemaining,
 		Success:        true,
-		Secret:         secret,
+		Secret:         string(payloadBytes),
 	})
 }
 

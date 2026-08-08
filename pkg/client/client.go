@@ -171,6 +171,78 @@ func CreateWithOpts(instanceURL string, secret Secret, opts CreateOpts) (string,
 	return u.String(), expiresAt, nil
 }
 
+// CreateRawWithOpts posts the encrypted binary payload directly to /api/create/raw using application/octet-stream,
+// eliminating client and server Base64 and JSON encoding overhead.
+func CreateRawWithOpts(instanceURL string, secret Secret, opts CreateOpts) (string, time.Time, error) {
+	u, err := url.Parse(instanceURL)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("parsing instance URL: %w", err)
+	}
+
+	pass, err := genPass()
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("generating password: %w", err)
+	}
+
+	data, err := secret.serialize(pass)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("serializing data: %w", err)
+	}
+
+	createURL := u.JoinPath(strings.Join([]string{".", "api", "create", "raw"}, "/"))
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	if opts.ExpireIn > time.Second {
+		createURL.RawQuery = url.Values{
+			"expire": []string{strconv.Itoa(int(opts.ExpireIn / time.Second))},
+		}.Encode()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL.String(), bytes.NewReader(data))
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("User-Agent", UserAgent)
+
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		// Fallback to standard CreateWithOpts if server does not support /api/create/raw (e.g. 404 Not Found)
+		if resp.StatusCode == http.StatusNotFound {
+			return CreateWithOpts(instanceURL, secret, opts)
+		}
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("http error: status %d", resp.StatusCode)
+		}
+		return "", time.Time{}, fmt.Errorf("http error: status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var res struct {
+		ExpiresAt *time.Time `json:"expires_at"`
+		SecretID  string     `json:"secret_id"`
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", time.Time{}, fmt.Errorf("decoding response payload: %w", err)
+	}
+
+	u.Fragment = strings.Join([]string{res.SecretID, pass}, "|")
+
+	var expiresAt time.Time
+	if res.ExpiresAt != nil {
+		expiresAt = *res.ExpiresAt
+	}
+
+	return u.String(), expiresAt, nil
+}
+
 // Fetch retrieves a secret by its given URL. The URL given must
 // include the fragment (part after the `#`) with the secret ID and
 // the encryption passphrase.

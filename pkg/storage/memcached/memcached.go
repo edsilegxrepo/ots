@@ -36,7 +36,7 @@ const (
 )
 
 type memcachedSecretEntry struct {
-	Content        string `json:"c"`
+	Content        []byte `json:"c"`
 	ReadsRemaining int    `json:"r"`
 }
 
@@ -95,15 +95,15 @@ func (s *Storage) Count() (int64, error) {
 	return c, nil
 }
 
-// Create inserts a new secret with TTL expiration and total allowed reads
-func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (string, error) {
+// Create inserts a raw binary secret blob with TTL expiration and total allowed reads
+func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
 	id := uuid.Must(uuid.NewV4()).String()
 	if reads < 1 {
 		reads = 1
 	}
 
 	entry := memcachedSecretEntry{
-		Content:        secret,
+		Content:        payload,
 		ReadsRemaining: reads,
 	}
 
@@ -130,20 +130,20 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 	return id, nil
 }
 
-// ReadAndDestroy returns secret content, atomically decrements remaining reads via CAS, and deletes key when reads <= 0
-func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
+// ReadAndDestroy returns raw binary secret payload, atomically decrements remaining reads via CAS, and deletes key when reads <= 0
+func (s *Storage) ReadAndDestroy(id string) ([]byte, int, error) {
 	for range maxCASRetries {
 		item, err := s.client.Get(id)
 		if err != nil {
 			if err == memcache.ErrCacheMiss {
-				return "", 0, storage.ErrSecretNotFound
+				return nil, 0, storage.ErrSecretNotFound
 			}
-			return "", 0, fmt.Errorf("getting memcached item: %w", err)
+			return nil, 0, fmt.Errorf("getting memcached item: %w", err)
 		}
 
 		var entry memcachedSecretEntry
 		if err := json.Unmarshal(item.Value, &entry); err != nil {
-			return "", 0, fmt.Errorf("unmarshalling memcached entry: %w", err)
+			return nil, 0, fmt.Errorf("unmarshalling memcached entry: %w", err)
 		}
 
 		entry.ReadsRemaining--
@@ -158,7 +158,7 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 		// Update entry with CAS
 		updatedData, err := json.Marshal(entry)
 		if err != nil {
-			return "", 0, fmt.Errorf("marshalling memcached CAS entry: %w", err)
+			return nil, 0, fmt.Errorf("marshalling memcached CAS entry: %w", err)
 		}
 
 		item.Value = updatedData
@@ -167,11 +167,11 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 			return entry.Content, entry.ReadsRemaining, nil
 		}
 		if err != memcache.ErrCASConflict {
-			return "", 0, fmt.Errorf("memcached CAS error: %w", err)
+			return nil, 0, fmt.Errorf("memcached CAS error: %w", err)
 		}
 		// If CAS conflict occurs, retry loop
 	}
 
 	// Fallback if CAS retries exhausted
-	return "", 0, storage.ErrSecretNotFound
+	return nil, 0, storage.ErrSecretNotFound
 }

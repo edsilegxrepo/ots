@@ -1,6 +1,7 @@
 package client
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -126,4 +127,29 @@ func TestLoadSettingsErrorHandling(t *testing.T) {
 	_, err = LoadSettings(invalidServer.URL)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "decoding response")
+}
+
+func TestCLICreateRawWithOpts(t *testing.T) {
+	var receivedRawBody []byte
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/create/raw" {
+			var err error
+			receivedRawBody, err = io.ReadAll(r.Body)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"success":true,"secret_id":"raw_secret_999"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer testServer.Close()
+
+	s := Secret{Secret: "CLI Raw Binary Secret Message"}
+	secretURL, _, err := CreateRawWithOpts(testServer.URL, s, CreateOpts{Reads: 1})
+	require.NoError(t, err)
+	assert.Contains(t, secretURL, "#raw_secret_999")
+	assert.NotEmpty(t, receivedRawBody)
 }

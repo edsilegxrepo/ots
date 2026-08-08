@@ -27,13 +27,14 @@ import (
 	"time"
 
 	badgerdb "github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4/options"
 	"github.com/gofrs/uuid"
 
 	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
 type badgerSecretEntry struct {
-	Content        string    `json:"c"`
+	Content        []byte    `json:"c"`
 	ExpiresAt      time.Time `json:"e"`
 	ReadsRemaining int       `json:"r"`
 }
@@ -74,7 +75,7 @@ func New(connStr string) (*Storage, error) {
 	} else {
 		opts = badgerdb.DefaultOptions(filepath.Clean(dbPath))
 	}
-	opts = opts.WithLogger(nil)
+	opts = opts.WithLogger(nil).WithCompression(options.ZSTD)
 
 	db, err := badgerdb.Open(opts)
 	if err != nil {
@@ -123,8 +124,8 @@ func (s *Storage) Count() (int64, error) {
 	return c, nil
 }
 
-// Create inserts a new secret with native TTL expiration and total allowed reads
-func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (string, error) {
+// Create inserts a raw binary secret blob with native TTL expiration and total allowed reads
+func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
 	id := uuid.Must(uuid.NewV4()).String()
 	if reads < 1 {
 		reads = 1
@@ -136,7 +137,7 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 	}
 
 	entry := badgerSecretEntry{
-		Content:        secret,
+		Content:        payload,
 		ExpiresAt:      expiresAt,
 		ReadsRemaining: reads,
 	}
@@ -161,10 +162,10 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 	return id, nil
 }
 
-// ReadAndDestroy returns secret content, decrements remaining reads, and destroys entry when reads <= 0
-func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
+// ReadAndDestroy returns raw binary secret payload, decrements remaining reads, and destroys entry when reads <= 0
+func (s *Storage) ReadAndDestroy(id string) ([]byte, int, error) {
 	var (
-		content        string
+		content        []byte
 		readsRemaining int
 		notFound       bool
 	)
@@ -222,10 +223,10 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 	})
 
 	if notFound || err == storage.ErrSecretNotFound {
-		return "", 0, storage.ErrSecretNotFound
+		return nil, 0, storage.ErrSecretNotFound
 	}
 	if err != nil {
-		return "", 0, fmt.Errorf("badger update transaction: %w", err)
+		return nil, 0, fmt.Errorf("badger update transaction: %w", err)
 	}
 
 	return content, readsRemaining, nil

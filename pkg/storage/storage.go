@@ -12,10 +12,10 @@ type (
 	Storage interface {
 		// Count returns the number of stored secrets
 		Count() (int64, error)
-		// Create inserts a new secret with total allowed reads and returns its ID
-		Create(secret string, expireIn time.Duration, reads int) (string, error)
-		// ReadAndDestroy returns secret content, decrements remaining reads, and destroys entry when reads <= 0
-		ReadAndDestroy(id string) (secret string, readsRemaining int, err error)
+		// Create inserts a raw binary secret blob with total allowed reads and returns its ID
+		Create(payload []byte, expireIn time.Duration, reads int) (string, error)
+		// ReadAndDestroy returns raw binary secret payload, decrements remaining reads, and destroys entry when reads <= 0
+		ReadAndDestroy(id string) (payload []byte, readsRemaining int, err error)
 	}
 )
 

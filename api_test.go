@@ -185,7 +185,7 @@ func TestHandleReadAndDestroy(t *testing.T) {
 	api, store := newTestAPI(t)
 
 	// Create secret
-	id, err := store.Create("secret_content", time.Hour, 1)
+	id, err := store.Create([]byte("secret_content"), time.Hour, 1)
 	require.NoError(t, err)
 
 	// Read secret

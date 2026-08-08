@@ -197,7 +197,7 @@ func TestHandleIndex(t *testing.T) {
 
 func TestUpdateStoredSecretsCount(t *testing.T) {
 	store := memory.New()
-	_, err := store.Create("secret_1", time.Hour, 1)
+	_, err := store.Create([]byte("secret_1"), time.Hour, 1)
 	require.NoError(t, err)
 
 	updateStoredSecretsCount(store, testCollector)

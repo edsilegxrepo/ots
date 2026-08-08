@@ -27,7 +27,7 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 	assert.Equal(t, int64(0), count)
 
 	// Create single-read secret
-	id1, err := store.Create("secret_content_1", time.Hour, 1)
+	id1, err := store.Create([]byte("secret_content_1"), time.Hour, 1)
 	require.NoError(t, err)
 	assert.NotEmpty(t, id1)
 
@@ -38,7 +38,7 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 	// Read and destroy single-read secret
 	content, remaining, err := store.ReadAndDestroy(id1)
 	require.NoError(t, err)
-	assert.Equal(t, "secret_content_1", content)
+	assert.Equal(t, []byte("secret_content_1"), content)
 	assert.Equal(t, 0, remaining)
 
 	// Second read returns ErrSecretNotFound
@@ -46,13 +46,13 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 	assert.Equal(t, storage.ErrSecretNotFound, err)
 
 	// Create multi-read secret (3 reads)
-	id2, err := store.Create("multi_read_secret", time.Hour, 3)
+	id2, err := store.Create([]byte("multi_read_secret"), time.Hour, 3)
 	require.NoError(t, err)
 
 	// Read 1 (2 remaining)
 	content, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
-	assert.Equal(t, "multi_read_secret", content)
+	assert.Equal(t, []byte("multi_read_secret"), content)
 	assert.Equal(t, 2, remaining)
 
 	// Read 2 (1 remaining)
@@ -76,12 +76,12 @@ func TestSQLiteDiskStorage(t *testing.T) {
 	store, err := New("sqlite://" + dbFile)
 	require.NoError(t, err)
 
-	id, err := store.Create("disk_sqlite_secret", time.Hour, 1)
+	id, err := store.Create([]byte("disk_sqlite_secret"), time.Hour, 1)
 	require.NoError(t, err)
 
 	content, remaining, err := store.ReadAndDestroy(id)
 	require.NoError(t, err)
-	assert.Equal(t, "disk_sqlite_secret", content)
+	assert.Equal(t, []byte("disk_sqlite_secret"), content)
 	assert.Equal(t, 0, remaining)
 
 	require.NoError(t, store.Close())
@@ -92,7 +92,7 @@ func TestSQLiteExpiration(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = store.Close() }()
 
-	id, err := store.Create("expired_secret", time.Second, 1)
+	id, err := store.Create([]byte("expired_secret"), time.Second, 1)
 	require.NoError(t, err)
 
 	time.Sleep(1500 * time.Millisecond)

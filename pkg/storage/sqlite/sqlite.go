@@ -67,16 +67,18 @@ func New(connStr string) (*Storage, error) {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
-	// Apply WAL mode and busy timeout for concurrent safety
+	// Apply WAL mode, busy timeout, and memory cache PRAGMAs for concurrent safety
 	_, _ = db.Exec("PRAGMA journal_mode=WAL;")
 	_, _ = db.Exec("PRAGMA busy_timeout=5000;")
 	_, _ = db.Exec("PRAGMA synchronous=NORMAL;")
+	_, _ = db.Exec("PRAGMA temp_store=MEMORY;")
+	_, _ = db.Exec("PRAGMA cache_size=-64000;") // 64MB Page Cache RAM
 
 	// Initialize table schema
 	schema := `
 	CREATE TABLE IF NOT EXISTS secrets (
 		id TEXT PRIMARY KEY,
-		secret TEXT NOT NULL,
+		payload BLOB NOT NULL,
 		reads INTEGER NOT NULL,
 		expires_at INTEGER NOT NULL
 	);
@@ -135,8 +137,8 @@ func (s *Storage) Count() (int64, error) {
 	return count, nil
 }
 
-// Create inserts a new secret with total allowed reads and returns its ID
-func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (string, error) {
+// Create inserts a raw binary secret blob with total allowed reads and returns its ID
+func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
 	id := uuid.Must(uuid.NewV4()).String()
 	if reads < 1 {
 		reads = 1
@@ -147,8 +149,8 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 		expiresAt = time.Now().Add(expireIn).Unix()
 	}
 
-	query := "INSERT INTO secrets (id, secret, reads, expires_at) VALUES (?, ?, ?, ?);"
-	_, err := s.db.Exec(query, id, secret, reads, expiresAt)
+	query := "INSERT INTO secrets (id, payload, reads, expires_at) VALUES (?, ?, ?, ?);"
+	_, err := s.db.Exec(query, id, payload, reads, expiresAt)
 	if err != nil {
 		return "", fmt.Errorf("sqlite insert secret: %w", err)
 	}
@@ -156,38 +158,38 @@ func (s *Storage) Create(secret string, expireIn time.Duration, reads int) (stri
 	return id, nil
 }
 
-// ReadAndDestroy returns secret content, decrements remaining reads, and destroys entry when reads <= 0
-func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
+// ReadAndDestroy returns raw binary secret payload, decrements remaining reads, and destroys entry when reads <= 0
+func (s *Storage) ReadAndDestroy(id string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", 0, fmt.Errorf("sqlite begin transaction: %w", err)
+		return nil, 0, fmt.Errorf("sqlite begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	now := time.Now().Unix()
 	var (
-		secret    string
+		payload   []byte
 		reads     int
 		expiresAt int64
 	)
 
-	query := "SELECT secret, reads, expires_at FROM secrets WHERE id = ?;"
-	err = tx.QueryRowContext(ctx, query, id).Scan(&secret, &reads, &expiresAt)
+	query := "SELECT payload, reads, expires_at FROM secrets WHERE id = ?;"
+	err = tx.QueryRowContext(ctx, query, id).Scan(&payload, &reads, &expiresAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", 0, storage.ErrSecretNotFound
+			return nil, 0, storage.ErrSecretNotFound
 		}
-		return "", 0, fmt.Errorf("sqlite scan row: %w", err)
+		return nil, 0, fmt.Errorf("sqlite scan row: %w", err)
 	}
 
 	// Check expiration
 	if expiresAt > 0 && expiresAt <= now {
 		_, _ = tx.ExecContext(ctx, "DELETE FROM secrets WHERE id = ?;", id)
 		_ = tx.Commit()
-		return "", 0, storage.ErrSecretNotFound
+		return nil, 0, storage.ErrSecretNotFound
 	}
 
 	readsRemaining := reads - 1
@@ -195,18 +197,18 @@ func (s *Storage) ReadAndDestroy(id string) (string, int, error) {
 	if readsRemaining <= 0 {
 		_, err = tx.ExecContext(ctx, "DELETE FROM secrets WHERE id = ?;", id)
 		if err != nil {
-			return "", 0, fmt.Errorf("sqlite delete secret: %w", err)
+			return nil, 0, fmt.Errorf("sqlite delete secret: %w", err)
 		}
 	} else {
 		_, err = tx.ExecContext(ctx, "UPDATE secrets SET reads = ? WHERE id = ?;", readsRemaining, id)
 		if err != nil {
-			return "", 0, fmt.Errorf("sqlite update remaining reads: %w", err)
+			return nil, 0, fmt.Errorf("sqlite update remaining reads: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		return "", 0, fmt.Errorf("sqlite commit transaction: %w", err)
+		return nil, 0, fmt.Errorf("sqlite commit transaction: %w", err)
 	}
 
-	return secret, readsRemaining, nil
+	return payload, readsRemaining, nil
 }

@@ -107,7 +107,7 @@ func TestMockMemcachedStorageLifecycle(t *testing.T) {
 	assert.Equal(t, int64(0), count)
 
 	// Create single-read secret
-	id1, err := store.Create("mc_secret_1", time.Hour, 1)
+	id1, err := store.Create([]byte("mc_secret_1"), time.Hour, 1)
 	require.NoError(t, err)
 	assert.NotEmpty(t, id1)
 
@@ -118,7 +118,7 @@ func TestMockMemcachedStorageLifecycle(t *testing.T) {
 	// Read & destroy single read secret
 	content, remaining, err := store.ReadAndDestroy(id1)
 	require.NoError(t, err)
-	assert.Equal(t, "mc_secret_1", content)
+	assert.Equal(t, []byte("mc_secret_1"), content)
 	assert.Equal(t, 0, remaining)
 
 	// Second read returns ErrSecretNotFound
@@ -127,13 +127,13 @@ func TestMockMemcachedStorageLifecycle(t *testing.T) {
 
 	// Create multi-read secret with CAS retry simulation
 	mock.casFailOnce = true
-	id2, err := store.Create("mc_secret_multi", time.Hour, 2)
+	id2, err := store.Create([]byte("mc_secret_multi"), time.Hour, 2)
 	require.NoError(t, err)
 
 	// Read 1 (1 remaining) - exercises CAS retry on 1st attempt
 	content, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
-	assert.Equal(t, "mc_secret_multi", content)
+	assert.Equal(t, []byte("mc_secret_multi"), content)
 	assert.Equal(t, 1, remaining)
 
 	// Read 2 (0 remaining)

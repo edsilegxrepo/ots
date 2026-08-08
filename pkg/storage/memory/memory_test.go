@@ -19,7 +19,7 @@ func TestMemoryStorageLifecycle(t *testing.T) {
 	assert.Equal(t, int64(0), count)
 
 	// Create a secret with 1 hour expiration and 2 allowed reads
-	id, err := store.Create("top_secret_data", 1*time.Hour, 2)
+	id, err := store.Create([]byte("top_secret_data"), 1*time.Hour, 2)
 	require.NoError(t, err)
 	assert.NotEmpty(t, id)
 
@@ -30,13 +30,13 @@ func TestMemoryStorageLifecycle(t *testing.T) {
 	// First read (should leave 1 read remaining)
 	data, readsRem, err := store.ReadAndDestroy(id)
 	require.NoError(t, err)
-	assert.Equal(t, "top_secret_data", data)
+	assert.Equal(t, []byte("top_secret_data"), data)
 	assert.Equal(t, 1, readsRem)
 
 	// Second read (should reach 0 remaining and destroy entry)
 	data, readsRem, err = store.ReadAndDestroy(id)
 	require.NoError(t, err)
-	assert.Equal(t, "top_secret_data", data)
+	assert.Equal(t, []byte("top_secret_data"), data)
 	assert.Equal(t, 0, readsRem)
 
 	// Count after destroy
@@ -57,7 +57,7 @@ func TestMemoryStorageExpiration(t *testing.T) {
 	store.store[id] = memStorageSecret{
 		Expiry:         time.Now().Add(-1 * time.Second),
 		ReadsRemaining: 1,
-		Secret:         "expired_secret",
+		Payload:        []byte("expired_secret"),
 	}
 
 	_, _, err := store.ReadAndDestroy(id)
@@ -67,7 +67,7 @@ func TestMemoryStorageExpiration(t *testing.T) {
 	store.store[id] = memStorageSecret{
 		Expiry:         time.Now().Add(-1 * time.Second),
 		ReadsRemaining: 1,
-		Secret:         "old",
+		Payload:        []byte("old"),
 	}
 	store.pruneStore()
 

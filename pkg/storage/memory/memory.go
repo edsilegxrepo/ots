@@ -15,7 +15,7 @@ type (
 	memStorageSecret struct {
 		Expiry         time.Time
 		ReadsRemaining int
-		Secret         string //#nosec:G117 // This application works with secrets
+		Payload        []byte //#nosec:G117 // This application works with secrets
 	}
 
 	storageMem struct {
@@ -44,7 +44,7 @@ func (s *storageMem) Count() (int64, error) {
 	return int64(len(s.store)), nil
 }
 
-func (s *storageMem) Create(secret string, expireIn time.Duration, reads int) (string, error) {
+func (s *storageMem) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -64,19 +64,19 @@ func (s *storageMem) Create(secret string, expireIn time.Duration, reads int) (s
 	s.store[id] = memStorageSecret{
 		Expiry:         expire,
 		ReadsRemaining: reads,
-		Secret:         secret,
+		Payload:        payload,
 	}
 
 	return id, nil
 }
 
-func (s *storageMem) ReadAndDestroy(id string) (string, int, error) {
+func (s *storageMem) ReadAndDestroy(id string) ([]byte, int, error) {
 	s.Lock()
 	defer s.Unlock()
 
 	secret, ok := s.store[id]
 	if !ok {
-		return "", 0, storage.ErrSecretNotFound
+		return nil, 0, storage.ErrSecretNotFound
 	}
 
 	// Still check to see if the secret has expired in order to prevent a
@@ -84,7 +84,7 @@ func (s *storageMem) ReadAndDestroy(id string) (string, int, error) {
 	// not yet been invoked.
 	if secret.hasExpired() {
 		delete(s.store, id)
-		return "", 0, storage.ErrSecretNotFound
+		return nil, 0, storage.ErrSecretNotFound
 	}
 
 	secret.ReadsRemaining--
@@ -94,7 +94,7 @@ func (s *storageMem) ReadAndDestroy(id string) (string, int, error) {
 		s.store[id] = secret
 	}
 
-	return secret.Secret, secret.ReadsRemaining, nil
+	return secret.Payload, secret.ReadsRemaining, nil
 }
 
 func (s *storageMem) pruneStore() {
