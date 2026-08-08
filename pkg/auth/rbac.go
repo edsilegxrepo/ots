@@ -93,7 +93,7 @@ func (r *RBACEvaluator) IsProtectedEndpoint(reqPath string) bool {
 	}
 
 	// Default protection for secret creation
-	if reqPath == "/api/create" {
+	if strings.HasPrefix(reqPath, "/api/create") {
 		return true
 	}
 

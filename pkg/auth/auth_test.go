@@ -160,6 +160,7 @@ func TestRBACEvaluator(t *testing.T) {
 
 	t.Run("Endpoint Protection Check", func(t *testing.T) {
 		assert.True(t, rbac.IsProtectedEndpoint("/api/create"))
+		assert.True(t, rbac.IsProtectedEndpoint("/api/create/raw"), "/api/create/raw must be protected")
 		assert.True(t, rbac.IsProtectedEndpoint("/api/create/"), "trailing slash must be normalized")
 		assert.False(t, rbac.IsProtectedEndpoint("/secret"))
 		assert.False(t, rbac.IsProtectedEndpoint("/api/get/12345"))
