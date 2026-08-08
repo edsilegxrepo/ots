@@ -65,14 +65,6 @@
         </button>
       </template>
       <template v-else>
-        <!-- Burn Alert Warning Banner -->
-        <div v-if="readsRemaining === 0" class="alert alert-warning border-warning shadow-sm mb-3 d-flex align-items-center" role="alert">
-          <i class="fas fa-triangle-exclamation fa-lg text-warning me-3" />
-          <div>
-            <strong>Burned Secret Alert:</strong> This secret has been permanently deleted from server memory. Copy or save your content now before closing this tab.
-          </div>
-        </div>
-
         <!-- Sender Note Display Container -->
         <div v-if="senderNote" class="card border-info-subtle mb-3 shadow-sm">
           <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center py-2">
@@ -152,6 +144,13 @@
         <div v-if="readsRemaining > 0" class="alert alert-info mt-3 shadow-sm" role="alert">
           <i class="fas fa-circle-info me-2" />
           {{ $t('text-reads-remaining-info', { count: readsRemaining }) }}
+        </div>
+        <!-- Burn Alert Warning Banner at Bottom -->
+        <div v-if="readsRemaining === 0" class="alert alert-warning border-warning shadow-sm mt-3 mb-0 d-flex align-items-center" role="alert">
+          <i class="fas fa-triangle-exclamation fa-lg text-warning me-3" />
+          <div>
+            <strong>Burned Secret Alert:</strong> This secret has been permanently deleted from server memory. Copy or save your content now before closing this tab.
+          </div>
         </div>
       </template>
     </div>
