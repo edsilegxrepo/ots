@@ -3,6 +3,7 @@
     <app-navbar
       v-model:theme="theme"
       @navigate="navigate"
+      @show-explanation="showExplanationModal = true"
     />
 
     <div class="container mt-4">
@@ -55,30 +56,29 @@
 
     <!-- Explanation Modal -->
     <div
-      id="explanationModal"
-      class="modal fade"
+      v-if="showExplanationModal"
+      class="modal fade show d-block"
       tabindex="-1"
-      aria-labelledby="explanationModalLabel"
-      aria-hidden="true"
+      style="background-color: rgba(0, 0, 0, 0.6);"
+      @click.self="showExplanationModal = false"
     >
       <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-          <div class="modal-header bg-primary-subtle">
+        <div class="modal-content shadow-lg border-primary-subtle">
+          <div class="modal-header bg-primary-subtle py-2">
             <!-- Safe: Trusted internal translation string from i18n.yaml -->
             <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
             <h5
-              id="explanationModalLabel"
-              class="modal-title"
+              class="modal-title fw-bold text-primary-emphasis mb-0 d-flex align-items-center"
               v-html="$t('title-explanation')"
             />
             <button
               type="button"
               class="btn-close"
-              data-bs-dismiss="modal"
               aria-label="Close"
+              @click="showExplanationModal = false"
             />
           </div>
-          <div class="modal-body">
+          <div class="modal-body p-4">
             <ul>
               <li
                 v-for="(explanation, idx) in $tm('items-explanation')"
@@ -88,11 +88,11 @@
               </li>
             </ul>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer py-2">
             <button
               type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
+              class="btn btn-secondary btn-sm"
+              @click="showExplanationModal = false"
             >
               Close
             </button>
@@ -129,6 +129,7 @@ export default defineComponent({
 		return {
 			customize: {} as any,
 			error: "" as string | null,
+			showExplanationModal: false,
 			theme: "auto",
 		};
 	},

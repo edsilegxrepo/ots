@@ -18,6 +18,7 @@ package memcached
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -25,7 +26,6 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	"github.com/gofrs/uuid"
 
 	"github.com/edsilegxrepo/ots/pkg/storage"
 )
@@ -97,10 +97,8 @@ func (s *Storage) Count() (int64, error) {
 
 // Create inserts a raw binary secret blob with TTL expiration and total allowed reads
 func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
-	id := uuid.Must(uuid.NewV4()).String()
-	if reads < 1 {
-		reads = 1
-	}
+	id := storage.GenerateUUID()
+	reads = storage.NormalizeReads(reads)
 
 	entry := memcachedSecretEntry{
 		Content:        payload,
@@ -128,6 +126,29 @@ func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (str
 
 	s.countTracker.Add(1)
 	return id, nil
+}
+
+// Purge immediately destroys a stored secret entry in Memcached
+func (s *Storage) Purge(id string) ([]byte, error) {
+	item, err := s.client.Get(id)
+	if err != nil {
+		if errors.Is(err, memcache.ErrCacheMiss) {
+			return nil, storage.ErrSecretNotFound
+		}
+		return nil, fmt.Errorf("memcached get purge: %w", err)
+	}
+
+	var entry memcachedSecretEntry
+	if err := json.Unmarshal(item.Value, &entry); err != nil {
+		return nil, fmt.Errorf("unmarshalling memcached purge entry: %w", err)
+	}
+
+	if err := s.client.Delete(id); err != nil {
+		return nil, fmt.Errorf("memcached delete purge: %w", err)
+	}
+
+	s.countTracker.Add(-1)
+	return entry.Content, nil
 }
 
 // ReadAndDestroy returns raw binary secret payload, atomically decrements remaining reads via CAS, and deletes key when reads <= 0

@@ -60,7 +60,6 @@
 </template>
 
 <script lang="ts">
-import { Popover } from "bootstrap";
 import qrcode from "qrcode";
 import { defineComponent } from "vue";
 
@@ -129,31 +128,6 @@ export default defineComponent({
 	watch: {
 		qrContent() {
 			this.generateQR();
-		},
-
-		qrDataURL(to: string): void {
-			if (this.popover) {
-				this.popover.dispose();
-			}
-
-			this.popover = new Popover(this.$refs.qrButton, {
-				content: () => {
-					const img = document.createElement("img");
-					img.src = to;
-					return img;
-				},
-
-				html: true,
-				placement: "left",
-				trigger: "focus",
-			});
-
-			if (this.$refs.qrButton) {
-				(this.$refs.qrButton as HTMLElement).setAttribute(
-					"title",
-					this.computedTitle,
-				);
-			}
 		},
 	},
 });

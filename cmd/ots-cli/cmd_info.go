@@ -17,14 +17,14 @@ var infoCmd = &cobra.Command{
 	Aliases: []string{"settings", "status"},
 	Short:   "Display server settings, limits, and allowed file extensions for an OTS instance",
 	Example: `  ots-cli info
-  ots-cli info https://ots.fyi/
+  ots-cli info http://127.0.0.1:3000/
   ots-cli info --json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: infoRunE,
 }
 
 func init() {
-	defaultInstance := "https://ots.fyi/"
+	defaultInstance := "http://127.0.0.1:3000/"
 	if inst := os.Getenv("OTS_INSTANCE"); inst != "" {
 		defaultInstance = inst
 	}

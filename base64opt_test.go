@@ -99,12 +99,12 @@ func TestLiveServerBase64OptAllBackendsE2E(t *testing.T) {
 	defer func() { _ = badgerStore.Close() }()
 
 	backends := map[string]storage.Storage{
-		"Memory":  memory.New(),
-		"SQLite":  sqliteStore,
+		"Memory": memory.New(),
+		"SQLite": sqliteStore,
 		"Badger": badgerStore,
 	}
 
-	rawBinaryPayload := []byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
+	rawBinaryPayload := []byte("Raw zero-allocation binary streaming payload content")
 
 	for name, st := range backends {
 		t.Run("Raw_Streaming_E2E_"+name, func(t *testing.T) {
@@ -144,7 +144,7 @@ func TestLiveServerBase64OptAllBackendsE2E(t *testing.T) {
 			err = json.NewDecoder(getResp.Body).Decode(&readResp)
 			require.NoError(t, err)
 			assert.True(t, readResp.Success)
-			assert.NotEmpty(t, readResp.Secret)
+			assert.Equal(t, string(rawBinaryPayload), readResp.Secret)
 		})
 	}
 }

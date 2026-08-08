@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
 	redis "github.com/redis/go-redis/v9"
 
 	"github.com/edsilegxrepo/ots/pkg/storage"
@@ -49,7 +48,6 @@ if string.sub(data, 1, 1) == "{" then
         secret = secretObj.p or secretObj.secret
         reads_remaining = (secretObj.reads_remaining or 1) - 1
     end
-end
 if reads_remaining <= 0 then
     redis.call("DEL", key)
 else
@@ -61,7 +59,6 @@ else
     else
         redis.call("SET", key, cjson.encode(secretObj))
     end
-end
 return { secret, reads_remaining }
 `)
 
@@ -109,11 +106,9 @@ func (s storageRedis) Count() (n int64, err error) {
 }
 
 func (s storageRedis) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
-	if reads <= 0 {
-		reads = 1
-	}
-
-	id := uuid.Must(uuid.NewV4()).String()
+	reads = storage.NormalizeReads(reads)
+	id := storage.GenerateUUID()
+	// #nosec G117 -- Storage engine payload serialization for encrypted zero-knowledge blob persistence
 	data, err := json.Marshal(redisPayload{
 		Payload:        payload,
 		ReadsRemaining: reads,
@@ -164,4 +159,24 @@ func (storageRedis) redisKey(id string) string {
 	}
 
 	return strings.Join([]string{prefix, id}, ":")
+}
+
+// Purge immediately destroys a stored secret entry in Redis
+func (s storageRedis) Purge(id string) ([]byte, error) {
+	val, err := s.conn.Get(context.Background(), s.redisKey(id)).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, storage.ErrSecretNotFound
+		}
+		return nil, fmt.Errorf("redis get purge: %w", err)
+	}
+
+	_ = s.conn.Del(context.Background(), s.redisKey(id))
+
+	var payload redisPayload
+	if err := json.Unmarshal([]byte(val), &payload); err == nil {
+		return payload.Payload, nil
+	}
+
+	return []byte(val), nil
 }

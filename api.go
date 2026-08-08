@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 
@@ -89,11 +88,12 @@ func newAPI(s storage.Storage, c *metrics.Collector) *APIServer {
 	return NewAPI(s, c)
 }
 
-// Register attaches API endpoints (/create, /create/raw, /get/{id}, /settings, /isWritable, /healthz) to Gorilla Mux.
+// Register attaches API endpoints (/create, /create/raw, /get/{id}, /burn/{id}, /settings, /isWritable, /healthz) to Gorilla Mux.
 func (a *APIServer) Register(r *mux.Router) {
 	r.HandleFunc("/create", a.handleCreate)
 	r.HandleFunc("/create/raw", a.handleCreateRaw).Methods(http.MethodPost)
 	r.HandleFunc("/get/{id}", a.handleRead)
+	r.HandleFunc("/burn/{id}", a.handleBurn)
 	r.HandleFunc("/isWritable", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	r.HandleFunc("/settings", a.handleSettings).Methods(http.MethodGet)
 	r.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -101,7 +101,7 @@ func (a *APIServer) Register(r *mux.Router) {
 
 // errorResponse logs the internal error details with a tracking UUID and returns a sanitized JSON error.
 func (a *apiServer) errorResponse(res http.ResponseWriter, status int, err error, desc string) {
-	errID := uuid.Must(uuid.NewV4()).String()
+	errID := GenerateUUID()
 
 	if desc != "" {
 		// No description: Nothing interesting for the server log
@@ -336,6 +336,38 @@ func (a *apiServer) handleRead(res http.ResponseWriter, r *http.Request) {
 		ReadsRemaining: readsRemaining,
 		Success:        true,
 		Secret:         string(payloadBytes),
+	})
+}
+
+// handleBurn immediately destroys a stored secret by secret ID (early manual receiver burn).
+func (a *apiServer) handleBurn(res http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+	if id == "" {
+		a.errorResponse(res, http.StatusBadRequest, errors.New("id missing"), "")
+		return
+	}
+
+	payloadBytes, err := a.store.Purge(id)
+	if err != nil {
+		if errors.Is(err, storage.ErrSecretNotFound) {
+			a.jsonResponse(res, http.StatusOK, apiResponse{
+				ReadsRemaining: 0,
+				Success:        true,
+			})
+			return
+		}
+		a.errorResponse(res, http.StatusInternalServerError, err, "purging secret")
+		return
+	}
+
+	if len(payloadBytes) > 0 {
+		a.storageBytes.Add(-int64(len(payloadBytes)))
+	}
+
+	a.jsonResponse(res, http.StatusOK, apiResponse{
+		ReadsRemaining: 0,
+		Success:        true,
 	})
 }
 

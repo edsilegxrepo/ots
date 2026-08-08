@@ -1,6 +1,6 @@
 module github.com/edsilegxrepo/ots/pkg/client
 
-go 1.25.0
+go 1.26.0
 
 toolchain go1.26.5
 

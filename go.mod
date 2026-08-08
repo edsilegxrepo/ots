@@ -1,6 +1,6 @@
 module github.com/edsilegxrepo/ots
 
-go 1.25.7
+go 1.26.0
 
 toolchain go1.26.5
 
@@ -16,7 +16,6 @@ require (
 	github.com/edsilegxrepo/ots/pkg/client v0.0.0-00010101000000-000000000000
 	github.com/edsilegxrepo/ots/pkg/customization v0.0.0-20260806231054-72d901945284
 	github.com/edsilegxrepo/ots/pkg/tplfunc v0.0.0-20260806231054-72d901945284
-	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gorilla/mux v1.8.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/redis/go-redis/v9 v9.22.0

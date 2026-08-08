@@ -9,7 +9,7 @@ This document provides a comprehensive guide to the architecture, design, test c
 The OTS test suite is designed around three core principles:
 1. **Zero-Flake Isolation:** Unit tests run in-memory without external infrastructure or database dependencies.
 2. **End-to-End Cryptographic Integrity:** Tests verify that secrets are encrypted on the client side, stored purely as encrypted blobs, and decrypted locally upon retrieval.
-3. **OS & Environment Independence:** Extension matching and rate-limiting tests execute deterministically across Windows, Linux, and macOS.
+3. **OS & Environment Independence:** Extension matching and rate-limiting tests execute deterministically across Windows x86_64 and Linux amd64 target environments.
 
 ```mermaid
 graph TD
@@ -101,9 +101,12 @@ sequenceDiagram
 
 | Logical Group | Test Name | Technical Purpose / Description | Success Criteria (Expected Result) |
 |---|---|---|---|
-| **Auth Pipeline** | `TestAuthForwardAuthHeaders` | Tests ForwardAuth reverse proxy header trust, IP verification, and identity extraction. | **PASS**: Trusted proxy headers return identity; untrusted header spoofing rejected. |
-| **Auth Pipeline** | `TestAuthLocalArgon2id` | Tests Argon2id password verification, atomic file saving, user deletion, base64 fallback, and hot-reloading. | **PASS**: Argon2id verification succeeds; `DeleteUser` removes entry atomically. |
-| **Auth Pipeline** | `TestAuthRBACEvaluator` | Tests group RBAC authorization and path normalization (`path.Clean()`) against `/api/create`. | **PASS**: Authorized groups pass; unauthorized or path-traversal attempts return 403 Forbidden. |
+| **Master Live E2E**| `TestMasterProductionScenarioE2E` | Master production scenario suite testing SDK lifecycle, split-keys, premature burning, multi-read reusability, extension filtering, raw streaming, storage caps, custom expiry, and 20 parallel worker goroutines. | **PASS**: All 9 real-life production scenarios pass with 0 race conditions. |
+| **IAM Live E2E** | `TestForwardAuthIAMProtectionE2E` | Live E2E IAM ForwardAuth header protection (`X-Forwarded-User`, `X-Forwarded-Groups`). Tests 401 unauthenticated, 403 unauthorized group, and 201 authorized group. | **PASS**: Authelia / Traefik / Nginx reverse proxy headers enforced correctly. |
+| **Storage Live E2E**| `TestAllFiveStorageBackendsLiveE2E` | Live E2E verification of secret creation, attachment delivery, and burn-after-read across Memory, SQLite, BadgerDB, Redis, and Memcached engines. | **PASS**: All storage engines create, retrieve, and destroy secrets cleanly. |
+| **Auth Pipeline** | `TestForwardAuthAuthenticator` | Tests ForwardAuth reverse proxy header trust, IP verification, and identity extraction. | **PASS**: Trusted proxy headers return identity; untrusted header spoofing rejected. |
+| **Auth Pipeline** | `TestLocalArgon2idAuthenticator` | Tests Argon2id password verification, atomic file saving, user deletion, base64 fallback, and hot-reloading. | **PASS**: Argon2id verification succeeds; `DeleteUser` removes entry atomically. |
+| **Auth Pipeline** | `TestRBACEvaluator` | Tests group RBAC authorization and path normalization (`path.Clean()`) against `/api/create`. | **PASS**: Authorized groups pass; unauthorized or path-traversal attempts return 403 Forbidden. |
 | **CLI User Suite**| `TestCLIUserAddListDisableDelete` | Full E2E CLI testing of `ots-cli user add`, `list`, `disable`, and `delete` commands against `users.yaml`. | **PASS**: User account created, listed, disabled, and deleted cleanly. |
 | **Live E2E** | `TestLiveServerLargeAttachmentsE2E` | Verifies end-to-end 10MB binary attachment payload creation, HTTP transfer, and byte-for-byte decryption against live local OTS server. | **PASS**: 10MB attachment uploaded, fetched, and verified 100% intact. |
 | **Live E2E** | `TestLiveServerExtensionFilteringE2E` | Tests live extension filtering using group aliases (`@images`, `@office`) and blocked extensions (`.exe`). | **PASS**: Allowed extensions pass pre-flight; blocked extensions return `false`. |
@@ -170,25 +173,27 @@ sequenceDiagram
 
 | Package / Module | Statement Coverage | Status |
 |---|---|---|
-| **`github.com/Luzifer/ots/pkg/metrics`** | **`100.0%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/storage/memory`** | **`94.4%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/storage/sqlite`** | **`83.1%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/storage/badger`** | **`82.8%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/storage/memcached`** | **`81.8%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/storage/factory`** | **`81.2%`** | Exceeds 80% Goal |
-| **`github.com/Luzifer/ots/pkg/auth`** | **`78.5%`** | High Coverage |
-| **`github.com/Luzifer/ots` (Root Server)** | **`55.0%`** *(92% of core handlers)* | Fully Verified |
+| **`github.com/edsilegxrepo/ots/pkg/metrics`** | **`100.0%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/redis`** | **`85.2%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/badger`** | **`84.1%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/memcached`** | **`82.8%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/sqlite`** | **`82.2%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/factory`** | **`81.2%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/auth`** | **`80.8%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots/pkg/storage/memory`** | **`80.5%`** | Exceeds 80% Goal |
+| **`github.com/edsilegxrepo/ots` (Root Server)** | **`64.0%`** *(94%+ of core handlers)* | Fully Verified |
 
 ---
 
 ## 6. How to Run the Tests
 
-### Running Tests in PowerShell (Windows)
+### Running Tests in PowerShell (Windows - Go 1.26+)
 
 ```powershell
 # Run all tests across the workspace including CLI E2E tests
-go test -v ./...
-cd cmd/ots-cli; go test -v ./...
+go test -v .
+cd pkg/client; go test -v .
+cd ../../cmd/ots-cli; go test -v .
 
 # Run tests with coverage output for all submodules
 go test -cover .
@@ -199,11 +204,11 @@ cd ../storage/memory; go test -cover .
 cd ../../cmd/ots-cli; go test -cover .
 
 # Generate and view detailed function coverage profile
-go test "-coverprofile=c.out" github.com/Luzifer/ots
+go test "-coverprofile=c.out" github.com/edsilegxrepo/ots
 go tool cover -func c.out
 ```
 
-### Running Tests in Bash (Linux / macOS)
+### Running Tests in Bash (Linux amd64)
 
 ```bash
 # Run all tests recursively including CLI E2E tests

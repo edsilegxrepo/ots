@@ -1,19 +1,22 @@
 <template>
-  <div class="card border-primary-subtle mb-3">
-    <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+  <div :class="burned ? 'card border-danger-subtle shadow-sm mb-3' : 'card border-primary-subtle mb-3'">
+    <div :class="burned ? 'card-header bg-danger-subtle text-danger-emphasis d-flex justify-content-between align-items-center py-2 fw-bold' : 'card-header bg-primary-subtle d-flex justify-content-between align-items-center'">
       <div class="d-flex align-items-center">
         <!-- Safe: Trusted internal translation string from i18n.yaml -->
         <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-        <span v-html="$t('title-reading-secret')" />
+        <span v-if="!burned" v-html="$t('title-reading-secret')" />
+        <span v-else class="d-flex align-items-center">
+          <i class="fas fa-fire me-2 text-danger" /> Secret Permanently Burned
+        </span>
         <span
-          v-if="senderNote"
+          v-if="senderNote && !burned"
           class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 ms-2"
         >
           <i class="fas fa-envelope me-1" />
           {{ $t('text-message-received') }}
         </span>
       </div>
-      <div v-if="secret || files.length > 0" class="d-flex gap-2">
+      <div v-if="(secret || files.length > 0) && !burned" class="d-flex gap-2">
         <button
           class="btn btn-sm btn-outline-primary shadow-sm"
           :disabled="isGeneratingBundle"
@@ -24,7 +27,8 @@
         </button>
       </div>
     </div>
-    <div class="card-body">
+    <app-burned-display v-if="burned" />
+    <div v-else class="card-body">
       <template v-if="!secret && files.length === 0">
         <!-- Safe: Trusted internal translation string from i18n.yaml -->
         <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
@@ -130,15 +134,40 @@
           <p v-html="$t('text-attached-files')" />
           <FilesDisplay :files="files" />
         </template>
-        <div v-if="readsRemaining > 0" class="alert alert-info mt-3 shadow-sm" role="alert">
-          <i class="fas fa-circle-info me-2" />
-          {{ $t('text-reads-remaining-info', { count: readsRemaining }) }}
+        <div v-if="readsRemaining > 0" class="alert alert-info mt-3 shadow-sm d-flex justify-content-between align-items-center" role="alert">
+          <div class="d-flex align-items-center">
+            <i class="fas fa-circle-info me-2" />
+            <span>{{ $t('text-reads-remaining-info', { count: readsRemaining }) }}</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-danger shadow-sm ms-3"
+            :disabled="isBurning"
+            title="Immediately burn and delete this secret from server memory"
+            @click="showBurnModal = true"
+          >
+            <i class="fas fa-fire me-1" />
+            Burn Secret
+          </button>
         </div>
+
+        <!-- Burn Confirmation Modal Popup (Receiver) -->
+        <app-burn-modal
+          :show="showBurnModal"
+          :secret-id="secretId"
+          :reads-remaining="readsRemaining"
+          :is-burning="isBurning"
+          @close="showBurnModal = false"
+          @confirm="confirmBurnSecret"
+        />
         <!-- Burn Alert Warning Banner at Bottom -->
-        <div v-if="readsRemaining === 0" class="alert alert-warning border-warning shadow-sm mt-3 mb-0 d-flex align-items-center" role="alert">
-          <i class="fas fa-triangle-exclamation fa-lg text-warning me-3" />
+        <div v-if="readsRemaining === 0" class="alert alert-warning border-warning-subtle shadow-sm mt-3 mb-0 d-flex align-items-center" role="alert">
+          <i class="fas fa-fire fa-2x text-warning me-3" />
           <div>
-            <strong>Burned Secret Alert:</strong> This secret has been permanently deleted from server memory. Copy or save your content now before closing this tab.
+            <h6 class="fw-bold text-warning-emphasis mb-1">Secret Permanently Deleted</h6>
+            <span class="small text-secondary">
+              This secret has been permanently purged from server memory. Copy or save your content now before closing this tab.
+            </span>
           </div>
         </div>
       </template>
@@ -152,6 +181,8 @@ import JSZip from "jszip";
 import { defineComponent } from "vue";
 import appCrypto from "../crypto.ts";
 import OTSMeta from "../ots-meta";
+import appBurnModal from "./burn-modal.vue";
+import appBurnedDisplay from "./burned-display.vue";
 import appClipboardButton from "./clipboard-button.vue";
 import FilesDisplay from "./fileDisplay.vue";
 import GrowArea from "./growarea.vue";
@@ -167,12 +198,14 @@ interface FileEntry {
 }
 
 export default defineComponent({
-	components: { FilesDisplay, GrowArea, appClipboardButton, appQrButton },
+	components: { FilesDisplay, GrowArea, appBurnModal, appBurnedDisplay, appClipboardButton, appQrButton },
 
 	data() {
 		return {
+			burned: false,
 			files: [] as FileEntry[],
 			inputPassword: "",
+			isBurning: false,
 			isGeneratingBundle: false,
 			popover: null,
 			readsRemaining: 0,
@@ -181,6 +214,7 @@ export default defineComponent({
 			secretLoading: false,
 			senderMessageFormat: "text",
 			senderNote: "",
+			showBurnModal: false,
 			showRawNote: false,
 		};
 	},
@@ -198,6 +232,12 @@ export default defineComponent({
 
 		renderedFormattedMessage(): string {
 			if (!this.senderNote) return "";
+
+			DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+				if ("target" in node && node.getAttribute("target") === "_blank") {
+					node.setAttribute("rel", "noopener noreferrer");
+				}
+			});
 
 			const purifyOptions = {
 				ADD_ATTR: ["target"],
@@ -240,6 +280,30 @@ export default defineComponent({
 	emits: ["error"],
 
 	methods: {
+		confirmBurnSecret(): void {
+			if (this.isBurning || !this.secretId) return;
+			this.isBurning = true;
+
+			fetch(`/api/burn/${this.secretId}`, { method: "POST" })
+				.then((resp) => resp.json())
+				.then((data) => {
+					if (data && data.success) {
+						this.readsRemaining = 0;
+						this.secret = null;
+						this.senderNote = "";
+						this.files = [];
+						this.showBurnModal = false;
+						this.burned = true;
+					}
+				})
+				.catch((err) => {
+					console.error("Failed to burn secret:", err);
+				})
+				.finally(() => {
+					this.isBurning = false;
+				});
+		},
+
 		async computeSHA256(buffer: ArrayBuffer): Promise<string> {
 			const hashBuffer = await window.crypto.subtle.digest("SHA-256", buffer);
 			const bytes = new Uint8Array(hashBuffer);

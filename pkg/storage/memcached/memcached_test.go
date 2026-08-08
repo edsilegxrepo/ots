@@ -30,38 +30,6 @@ func newMockMemcachedClient() *mockMemcachedClient {
 	}
 }
 
-func (m *mockMemcachedClient) Get(key string) (*memcache.Item, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	item, ok := m.items[key]
-	if !ok {
-		return nil, memcache.ErrCacheMiss
-	}
-	// Return a copy with current CAS id
-	cp := *item
-	return &cp, nil
-}
-
-func (m *mockMemcachedClient) Set(item *memcache.Item) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.casCounter++
-	item.CasID = m.casCounter
-	cp := *item
-	m.items[item.Key] = &cp
-	return nil
-}
-
-func (m *mockMemcachedClient) Delete(key string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	delete(m.items, key)
-	return nil
-}
-
 func (m *mockMemcachedClient) CompareAndSwap(item *memcache.Item) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -79,6 +47,38 @@ func (m *mockMemcachedClient) CompareAndSwap(item *memcache.Item) error {
 	if existing.CasID != item.CasID {
 		return memcache.ErrCASConflict
 	}
+
+	m.casCounter++
+	item.CasID = m.casCounter
+	cp := *item
+	m.items[item.Key] = &cp
+	return nil
+}
+
+func (m *mockMemcachedClient) Delete(key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.items, key)
+	return nil
+}
+
+func (m *mockMemcachedClient) Get(key string) (*memcache.Item, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	item, ok := m.items[key]
+	if !ok {
+		return nil, memcache.ErrCacheMiss
+	}
+	// Return a copy with current CAS id
+	cp := *item
+	return &cp, nil
+}
+
+func (m *mockMemcachedClient) Set(item *memcache.Item) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	m.casCounter++
 	item.CasID = m.casCounter
@@ -137,7 +137,19 @@ func TestMockMemcachedStorageLifecycle(t *testing.T) {
 	assert.Equal(t, 1, remaining)
 
 	// Read 2 (0 remaining)
-	content, remaining, err = store.ReadAndDestroy(id2)
+	_, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
+
+	// Test Purge
+	pID, err := store.Create([]byte("mc_purge_payload"), time.Hour, 1)
+	require.NoError(t, err)
+
+	purged, err := store.Purge(pID)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("mc_purge_payload"), purged)
+
+	// Purge non-existent secret
+	_, err = store.Purge("missing-mc-id")
+	require.ErrorIs(t, err, storage.ErrSecretNotFound)
 }

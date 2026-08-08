@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/uuid"
-
 	"github.com/edsilegxrepo/ots/pkg/storage"
 )
 
@@ -48,18 +46,9 @@ func (s *storageMem) Create(payload []byte, expireIn time.Duration, reads int) (
 	s.Lock()
 	defer s.Unlock()
 
-	var (
-		expire time.Time
-		id     = uuid.Must(uuid.NewV4()).String()
-	)
-
-	if expireIn > 0 {
-		expire = time.Now().Add(expireIn)
-	}
-
-	if reads <= 0 {
-		reads = 1
-	}
+	id := storage.GenerateUUID()
+	expire := storage.CalculateExpiry(expireIn)
+	reads = storage.NormalizeReads(reads)
 
 	s.store[id] = memStorageSecret{
 		Expiry:         expire,
@@ -68,6 +57,20 @@ func (s *storageMem) Create(payload []byte, expireIn time.Duration, reads int) (
 	}
 
 	return id, nil
+}
+
+// Purge immediately destroys a stored secret entry in memory
+func (s *storageMem) Purge(id string) ([]byte, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	entry, ok := s.store[id]
+	if !ok {
+		return nil, storage.ErrSecretNotFound
+	}
+
+	delete(s.store, id)
+	return entry.Payload, nil
 }
 
 func (s *storageMem) ReadAndDestroy(id string) ([]byte, int, error) {

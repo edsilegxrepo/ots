@@ -8,6 +8,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -254,4 +255,54 @@ func TestCLI_AES256GCM_E2EAgainstLiveServer(t *testing.T) {
 	fetched, err := client.Fetch(secURL)
 	require.NoError(t, err)
 	assert.Equal(t, "Live AES-256-GCM Encrypted Payload", fetched.Secret)
+}
+
+func TestCLIBurnRunEMultiReadSecret(t *testing.T) {
+	allowedReadsList := []int{1, 2, 5}
+
+	for _, reads := range allowedReadsList {
+		t.Run(fmt.Sprintf("Reads-%d", reads), func(t *testing.T) {
+			secretID := "cli-burn-secret-uuid-999"
+			secretKey, err := generateRandomPassword(32)
+			require.NoError(t, err)
+
+			readsLeft := reads
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+
+				if r.URL.Path == "/api/burn/"+secretID {
+					if r.Method == http.MethodPost || r.Method == http.MethodDelete {
+						readsLeft = 0
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(`{"success":true,"reads_remaining":0}`))
+						return
+					}
+				}
+
+				if r.URL.Path == "/api/get/"+secretID {
+					if readsLeft <= 0 {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					readsLeft--
+					_, _ = w.Write([]byte(`{"success":true,"secret":"payload","reads_remaining":` + string(rune(readsLeft)) + `}`))
+					return
+				}
+
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			secURL := server.URL + "/#" + secretID + "|" + secretKey
+
+			// 1. Execute client.Burn via CLI
+			err = client.Burn(secURL)
+			require.NoError(t, err)
+			assert.Equal(t, 0, readsLeft)
+
+			// 2. Verify subsequent fetch returns 404
+			_, err = client.Fetch(secURL)
+			assert.Error(t, err)
+		})
+	}
 }
