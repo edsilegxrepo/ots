@@ -12,7 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/edsilegxrepo/ots/pkg/storage"
+	"github.com/edsilegxrepo/ots/pkg/storage/badger"
 	"github.com/edsilegxrepo/ots/pkg/storage/memory"
+	"github.com/edsilegxrepo/ots/pkg/storage/sqlite"
 )
 
 func TestBase64OptimizationPooledDecoding(t *testing.T) {
@@ -84,4 +87,64 @@ func TestBinaryStorageNormalizationCrossBackends(t *testing.T) {
 	// Verify one-time destruction
 	_, _, err = store.ReadAndDestroy(id)
 	assert.Error(t, err)
+}
+
+func TestLiveServerBase64OptAllBackendsE2E(t *testing.T) {
+	sqliteStore, err := sqlite.New("sqlite://:memory:")
+	require.NoError(t, err)
+	defer func() { _ = sqliteStore.Close() }()
+
+	badgerStore, err := badger.New("badger://:memory:")
+	require.NoError(t, err)
+	defer func() { _ = badgerStore.Close() }()
+
+	backends := map[string]storage.Storage{
+		"Memory":  memory.New(),
+		"SQLite":  sqliteStore,
+		"Badger": badgerStore,
+	}
+
+	rawBinaryPayload := []byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
+
+	for name, st := range backends {
+		t.Run("Raw_Streaming_E2E_"+name, func(t *testing.T) {
+			apiServer := NewAPI(st, testCollector)
+			router := mux.NewRouter()
+			apiServer.Register(router)
+
+			server := httptest.NewServer(router)
+			defer server.Close()
+
+			// 1. Post raw binary data to /api/create/raw
+			req, err := http.NewRequest(http.MethodPost, server.URL+"/create/raw", bytes.NewReader(rawBinaryPayload))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/octet-stream")
+
+			client := &http.Client{}
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+			var createResp apiResponse
+			err = json.NewDecoder(resp.Body).Decode(&createResp)
+			require.NoError(t, err)
+			assert.True(t, createResp.Success)
+			assert.NotEmpty(t, createResp.SecretID)
+
+			// 2. Fetch raw binary data from /api/get/{id}
+			getResp, err := client.Get(server.URL + "/get/" + createResp.SecretID)
+			require.NoError(t, err)
+			defer getResp.Body.Close()
+
+			assert.Equal(t, http.StatusOK, getResp.StatusCode)
+
+			var readResp apiResponse
+			err = json.NewDecoder(getResp.Body).Decode(&readResp)
+			require.NoError(t, err)
+			assert.True(t, readResp.Success)
+			assert.NotEmpty(t, readResp.Secret)
+		})
+	}
 }
