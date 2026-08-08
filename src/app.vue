@@ -39,7 +39,7 @@
             class="mx-2"
           >
             {{ $t('text-powered-by') }}
-            <a href="https://github.com/Luzifer/ots"><i class="fab fa-github" /> OTS</a>
+            <a href="https://github.com/edsilegxrepo/ots" target="_blank" rel="noopener noreferrer"><i class="fab fa-github" /> OTS</a>
             {{ version }}
           </span>
           <span

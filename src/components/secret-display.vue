@@ -13,15 +13,27 @@
           {{ $t('text-message-received') }}
         </span>
       </div>
-      <button
-        v-if="secret || files.length > 0"
-        class="btn btn-sm btn-outline-primary shadow-sm"
-        :disabled="isGeneratingBundle"
-        @click="downloadBundle"
-      >
-        <i :class="isGeneratingBundle ? 'fas fa-spinner fa-spin me-1' : 'fas fa-file-archive me-1'" />
-        {{ isGeneratingBundle ? $t('btn-downloading-bundle') : $t('btn-download-bundle') }}
-      </button>
+      <div class="d-flex gap-2">
+        <a
+          v-if="secret"
+          class="btn btn-sm btn-outline-secondary shadow-sm"
+          :href="secretContentBlobURL || ''"
+          download="secret.txt"
+          title="Save secret payload as plain text (.txt)"
+        >
+          <i class="fas fa-file-lines me-1" />
+          Save .txt
+        </a>
+        <button
+          v-if="secret || files.length > 0"
+          class="btn btn-sm btn-outline-primary shadow-sm"
+          :disabled="isGeneratingBundle"
+          @click="downloadBundle"
+        >
+          <i :class="isGeneratingBundle ? 'fas fa-spinner fa-spin me-1' : 'fas fa-file-archive me-1'" />
+          {{ isGeneratingBundle ? $t('btn-downloading-bundle') : $t('btn-download-bundle') }}
+        </button>
+      </div>
     </div>
     <div class="card-body">
       <template v-if="!secret && files.length === 0">
@@ -53,6 +65,14 @@
         </button>
       </template>
       <template v-else>
+        <!-- Burn Alert Warning Banner -->
+        <div v-if="readsRemaining === 0" class="alert alert-warning border-warning shadow-sm mb-3 d-flex align-items-center" role="alert">
+          <i class="fas fa-triangle-exclamation fa-lg text-warning me-3" />
+          <div>
+            <strong>Burned Secret Alert:</strong> This secret has been permanently deleted from server memory. Copy or save your content now before closing this tab.
+          </div>
+        </div>
+
         <!-- Sender Note Display Container -->
         <div v-if="senderNote" class="card border-info-subtle mb-3 shadow-sm">
           <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center py-2">
@@ -61,6 +81,16 @@
             </span>
             <div class="d-flex align-items-center gap-2">
               <span class="badge bg-info text-dark rounded-pill px-3 py-2 font-monospace">{{ senderMessageFormat }}</span>
+              <button
+                v-if="senderMessageFormat === 'html' || senderMessageFormat === 'md'"
+                type="button"
+                class="btn btn-sm btn-outline-info text-dark shadow-sm py-0 px-2"
+                style="font-size: 0.75rem;"
+                @click="showRawNote = !showRawNote"
+              >
+                <i :class="showRawNote ? 'fas fa-eye me-1' : 'fas fa-code me-1'" />
+                {{ showRawNote ? 'Rendered View' : 'Raw Source' }}
+              </button>
               <app-clipboard-button
                 :content="senderNote"
                 :title="$t('tooltip-copy-note')"
@@ -68,8 +98,11 @@
             </div>
           </div>
           <div class="card-body p-3">
+            <!-- Raw Source Mode -->
+            <pre v-if="showRawNote" class="mb-0 font-monospace text-wrap bg-dark text-light p-3 rounded border">{{ senderNote }}</pre>
+
             <!-- Plain Text Format -->
-            <pre v-if="senderMessageFormat === 'text'" class="mb-0 font-monospace text-wrap bg-body-tertiary p-3 rounded border">{{ senderNote }}</pre>
+            <pre v-else-if="senderMessageFormat === 'text'" class="mb-0 font-monospace text-wrap bg-body-tertiary p-3 rounded border">{{ senderNote }}</pre>
             
             <!-- JSON Format -->
             <pre v-else-if="senderMessageFormat === 'json'" class="mb-0 font-monospace text-wrap bg-dark text-light p-3 rounded border">{{ formattedJSONMessage }}</pre>
@@ -163,6 +196,7 @@ export default defineComponent({
 			secretLoading: false,
 			senderMessageFormat: "text",
 			senderNote: "",
+			showRawNote: false,
 		};
 	},
 

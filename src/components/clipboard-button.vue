@@ -1,12 +1,13 @@
 <template>
   <button
     v-if="hasClipboard"
-    :class="{'btn': true, 'btn-primary': !copyToClipboardSuccess, 'btn-success': copyToClipboardSuccess}"
+    :class="{'btn': true, 'btn-primary': !copyToClipboardSuccess, 'btn-success': copyToClipboardSuccess, 'shadow-sm': true}"
     :disabled="!content"
     :title="title || $t('tooltip-copy-to-clipboard') || 'Copy to Clipboard'"
     @click="copy"
   >
-    <i :class="{'fas fa-fw fa-clipboard': !copyToClipboardSuccess, 'fas fa-fw fa-circle-check': copyToClipboardSuccess}" />
+    <i :class="{'fas fa-fw fa-clipboard': !copyToClipboardSuccess, 'fas fa-fw fa-check': copyToClipboardSuccess, 'me-1': showLabel}" />
+    <span v-if="showLabel" class="small fw-semibold">{{ copyToClipboardSuccess ? 'Copied!' : (labelText || 'Copy') }}</span>
   </button>
 </template>
 
@@ -44,6 +45,18 @@ export default defineComponent({
 			default: null,
 			required: false,
 			type: String,
+		},
+
+		labelText: {
+			default: "",
+			required: false,
+			type: String,
+		},
+
+		showLabel: {
+			default: false,
+			required: false,
+			type: Boolean,
 		},
 
 		title: {

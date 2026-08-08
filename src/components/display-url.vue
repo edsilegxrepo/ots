@@ -74,10 +74,11 @@
 
       <!-- Safe: Trusted internal translation string from i18n.yaml -->
       <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-      <p v-html="$t('text-burn-hint')" />
-      <p v-if="expiresAt">
-        {{ $t('text-burn-time') }}
-        <strong>{{ expiresAt.toLocaleString() }}</strong>
+      <p v-if="expiresAt" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+        <span>{{ $t('text-burn-time') }} <strong>{{ expiresAt.toLocaleString() }}</strong></span>
+        <span v-if="countdownText" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle font-monospace px-2 py-1">
+          <i class="fas fa-clock me-1" /> Expires in {{ countdownText }}
+        </span>
       </p>
     </div>
     <div
@@ -134,7 +135,8 @@ export default defineComponent({
 	data() {
 		return {
 			burned: false,
-			popover: null,
+			countdownText: "",
+			timerId: null as number | null,
 		};
 	},
 
@@ -148,11 +150,42 @@ export default defineComponent({
 		selectURL(): void {
 			this.$refs.secretUrl.select();
 		},
+
+		updateCountdown(): void {
+			if (!this.expiresAt) {
+				this.countdownText = "";
+				return;
+			}
+			const diffMs = this.expiresAt.getTime() - Date.now();
+			if (diffMs <= 0) {
+				this.countdownText = "Expired";
+				return;
+			}
+			const totalSec = Math.floor(diffMs / 1000);
+			const h = Math.floor(totalSec / 3600);
+			const m = Math.floor((totalSec % 3600) / 60);
+			const s = totalSec % 60;
+			if (h > 0) {
+				this.countdownText = `${h}h ${m}m ${s}s`;
+			} else if (m > 0) {
+				this.countdownText = `${m}m ${s}s`;
+			} else {
+				this.countdownText = `${s}s`;
+			}
+		},
 	},
 
 	mounted(): void {
 		// Give the interface a moment to transistion and focus
 		window.setTimeout(() => this.$refs.secretUrl.focus(), 100);
+		this.updateCountdown();
+		this.timerId = window.setInterval(() => this.updateCountdown(), 1000);
+	},
+
+	unmounted(): void {
+		if (this.timerId) {
+			window.clearInterval(this.timerId);
+		}
 	},
 
 	name: "AppDisplayURL",

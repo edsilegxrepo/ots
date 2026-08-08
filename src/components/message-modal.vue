@@ -162,7 +162,7 @@
                 <label
                   class="btn btn-outline-primary"
                   for="fmtJSON"
-                ><i class="fas fa-file-code me-1" /> JSON</label>
+                ><i class="fas fa-brackets-curly me-1" /> JSON</label>
               </div>
             </div>
 
@@ -185,10 +185,23 @@
                     :value="fullLinkTemplate"
                   />
                 </div>
-                <div class="d-flex justify-content-end">
+                <div class="d-flex justify-content-end gap-2">
+                  <button
+                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    type="button"
+                    class="btn btn-outline-success shadow-sm"
+                    :class="{'btn-success text-white': copyRichSuccess}"
+                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
+                    @click="copyRichHTML(fullLinkTemplate)"
+                  >
+                    <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
+                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                  </button>
                   <app-clipboard-button
                     :content="fullLinkTemplate"
                     title="Copy Full Link Message"
+                    :show-label="true"
+                    label-text="Copy Raw"
                   />
                 </div>
               </div>
@@ -210,10 +223,23 @@
                     :value="dualLinkTemplate"
                   />
                 </div>
-                <div class="d-flex justify-content-end">
+                <div class="d-flex justify-content-end gap-2">
+                  <button
+                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    type="button"
+                    class="btn btn-outline-success shadow-sm"
+                    :class="{'btn-success text-white': copyRichSuccess}"
+                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
+                    @click="copyRichHTML(dualLinkTemplate)"
+                  >
+                    <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
+                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                  </button>
                   <app-clipboard-button
                     :content="dualLinkTemplate"
                     title="Copy Dual Link Message"
+                    :show-label="true"
+                    label-text="Copy Raw"
                   />
                 </div>
               </div>
@@ -235,10 +261,23 @@
                     :value="dualKeyTemplate"
                   />
                 </div>
-                <div class="d-flex justify-content-end">
+                <div class="d-flex justify-content-end gap-2">
+                  <button
+                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    type="button"
+                    class="btn btn-outline-success shadow-sm"
+                    :class="{'btn-success text-white': copyRichSuccess}"
+                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
+                    @click="copyRichHTML(dualKeyTemplate)"
+                  >
+                    <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
+                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                  </button>
                   <app-clipboard-button
                     :content="dualKeyTemplate"
                     title="Copy Decryption Key Message"
+                    :show-label="true"
+                    label-text="Copy Raw"
                   />
                 </div>
               </div>
@@ -260,10 +299,23 @@
                     :value="combinedChatTemplate"
                   />
                 </div>
-                <div class="d-flex justify-content-end">
+                <div class="d-flex justify-content-end gap-2">
+                  <button
+                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    type="button"
+                    class="btn btn-outline-success shadow-sm"
+                    :class="{'btn-success text-white': copyRichSuccess}"
+                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
+                    @click="copyRichHTML(combinedChatTemplate)"
+                  >
+                    <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
+                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                  </button>
                   <app-clipboard-button
                     :content="combinedChatTemplate"
                     title="Copy Combined Chat Notice"
+                    :show-label="true"
+                    label-text="Copy Raw"
                   />
                 </div>
               </div>
@@ -494,10 +546,50 @@ export default defineComponent({
 			// Plain Text Default
 			return `===================================================================\n             CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\nA secure, encrypted one-time secret has been generated for you.\n\n-------------------------------------------------------------------\nSECRET URL:\n${this.secretUrl}\n-------------------------------------------------------------------\n\nIMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n\n===================================================================`;
 		},
+
+		copyRichHTML(templateString: string): void {
+			let htmlString = templateString;
+			if (this.selectedFormat === "md") {
+				htmlString = `<div style="font-family: Arial, sans-serif; border: 1px solid #0d6efd; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">` +
+					templateString
+						.replace(/### (.*?)\n/g, "<h3 style='color: #0b5ed7; margin-top: 0;'>$1</h3>")
+						.replace(/> \[!WARNING\]\n> (.*?)\n/g, "<div style='background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 8px; margin: 10px 0;'><strong>NOTE:</strong> $1</div>")
+						.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+						.replace(/`(.*?)`/g, "<code style='background: #e9ecef; padding: 2px 4px; border-radius: 4px;'>$1</code>")
+						.replace(/- \*\*(.*?)\*\*: (.*?)\n/g, "<p style='margin: 4px 0;'><strong>$1:</strong> <a href='$2'>$2</a></p>")
+						.replace(/\n/g, "<br>") +
+					`</div>`;
+			}
+
+			try {
+				const htmlBlob = new Blob([htmlString], { type: "text/html" });
+				const textBlob = new Blob([templateString], { type: "text/plain" });
+				const item = new ClipboardItem({
+					"text/html": htmlBlob,
+					"text/plain": textBlob,
+				});
+
+				navigator.clipboard.write([item]).then(() => {
+					this.copyRichSuccess = true;
+					window.setTimeout(() => {
+						this.copyRichSuccess = false;
+					}, 2000);
+				});
+			} catch (_err) {
+				// Fallback to text copy if ClipboardItem text/html is unsupported
+				navigator.clipboard.writeText(templateString).then(() => {
+					this.copyRichSuccess = true;
+					window.setTimeout(() => {
+						this.copyRichSuccess = false;
+					}, 2000);
+				});
+			}
+		},
 	},
 
 	data() {
 		return {
+			copyRichSuccess: false,
 			selectedFormat: "text", // "text", "html", "md", "json"
 		};
 	},
