@@ -115,7 +115,7 @@
               <a
                 class="btn btn-secondary"
                 :href="secretContentBlobURL || ''"
-                download
+                :download="secretDownloadFilename"
                 :title="$t('tooltip-download-as-file')"
               >
                 <i class="fas fa-fw fa-download" />
@@ -229,6 +229,11 @@ export default defineComponent({
 			}
 
 			return DOMPurify.sanitize(this.senderNote.replace(/\n/g, "<br>"), purifyOptions);
+		},
+
+		secretDownloadFilename(): string {
+			const prefix = this.secretId ? this.secretId.substring(0, 8) : "payload";
+			return `secret-${prefix}.txt`;
 		},
 	},
 
