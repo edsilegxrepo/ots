@@ -270,7 +270,7 @@
                 :class="draftMessageFormat === 'json' ? 'btn-primary' : 'btn-outline-secondary'"
                 @click="setFormatMode('json')"
               >
-                <i class="fas fa-brackets-curly me-1" /> JSON
+                <i class="fas fa-file-code me-1" /> JSON
               </button>
             </div>
           </div>

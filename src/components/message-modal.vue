@@ -162,7 +162,7 @@
                 <label
                   class="btn btn-outline-primary"
                   for="fmtJSON"
-                ><i class="fas fa-brackets-curly me-1" /> JSON</label>
+                ><i class="fas fa-file-code me-1" /> JSON</label>
               </div>
             </div>
 
