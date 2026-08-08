@@ -13,7 +13,7 @@ var burnCmd = &cobra.Command{
 	Use:     "burn <url>",
 	Aliases: []string{"destroy", "expire"},
 	Short:   "Retrieves and permanently burns/destroys a secret from the OTS instance",
-	Example: `  ots-cli burn https://ots.fyi/#secret-id|secret-key`,
+	Example: `  ots-cli burn http://127.0.0.1:3000/#secret-id|secret-key`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    burnRunE,
 }

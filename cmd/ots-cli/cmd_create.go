@@ -26,9 +26,9 @@ type (
 )
 
 var createCmd = &cobra.Command{
-	Use:     "create [note] [-n note] [-f file]... [--instance url] [--secret-from file]",
-	Short:   "Create a new encrypted secret note in the given OTS instance",
-	Long:    "Creates an encrypted secret note or file attachment on an OTS instance. Content can be supplied via argument, --note flag, stdin, or file.",
+	Use:   "create [note] [-n note] [-f file]... [--instance url] [--secret-from file]",
+	Short: "Create a new encrypted secret note in the given OTS instance",
+	Long:  "Creates an encrypted secret note or file attachment on an OTS instance. Content can be supplied via argument, --note flag, stdin, or file.",
 	Example: `  ots-cli create "My secret password or note"
   ots-cli create -n "My secret note"
   echo "I'm a very secret note" | ots-cli create
@@ -38,7 +38,7 @@ var createCmd = &cobra.Command{
 }
 
 func init() {
-	defaultInstance := "https://ots.fyi/"
+	defaultInstance := "http://127.0.0.1:3000/"
 	if inst := os.Getenv("OTS_INSTANCE"); inst != "" {
 		defaultInstance = inst
 	}

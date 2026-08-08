@@ -83,7 +83,7 @@ type CreateOpts struct {
 // include the API paths, they are added automatically. For the
 // expireIn parameter zero value can be used to use server-default.
 //
-// So for OTS.fyi you'd use `New("https://ots.fyi/")`
+// So for local server you'd use `New("http://localhost:3000/")`
 func Create(instanceURL string, secret Secret, expireIn time.Duration) (string, time.Time, error) {
 	return CreateWithOpts(instanceURL, secret, CreateOpts{
 		ExpireIn: expireIn,
@@ -354,4 +354,47 @@ func genPass() (string, error) {
 	}
 
 	return string(pass), nil
+}
+
+// Burn sends a burn request to the server given the secret URL or base URL (#secret_id),
+// immediately purging the secret from server storage regardless of allowed reads count.
+func Burn(secretURL string) error {
+	u, err := url.Parse(secretURL)
+	if err != nil {
+		return fmt.Errorf("parsing secret URL: %w", err)
+	}
+
+	fragment, err := url.QueryUnescape(u.Fragment)
+	if err != nil {
+		return fmt.Errorf("unescaping fragment: %w", err)
+	}
+
+	secretID := strings.SplitN(fragment, "|", 2)[0]
+	if secretID == "" {
+		return fmt.Errorf("invalid secret URL: missing secret ID")
+	}
+
+	u.Path = "/api/burn/" + secretID
+	u.Fragment = ""
+
+	ctx, cancel := context.WithTimeout(context.Background(), RequestTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("building request: %w", err)
+	}
+	req.Header.Set("User-Agent", UserAgent)
+
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("sending request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
+	}
+
+	return nil
 }

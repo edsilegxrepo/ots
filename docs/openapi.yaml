@@ -19,8 +19,8 @@ externalDocs:
   description: Luzifer/OTS on Github
   url: https://github.com/Luzifer/ots
 servers:
-  - url: https://ots.fyi/api
-    description: Public hosted instance
+  - url: http://127.0.0.1:3000/api
+    description: Local OTS server instance
 paths:
   /create:
     post:
@@ -34,8 +34,8 @@ paths:
 
         To generate a URL that works with the web application, append
         `#SECRET_ID|PASSWORD` after the URL. For an instance on
-        `https://ots.fyi`, the example response in this documentation would
-        become `https://ots.fyi/#5e0065ee-5734-4548-9fd3-bb0bcd4c899d|mypass`.
+        `http://127.0.0.1:3000`, the example response in this documentation would
+        become `http://127.0.0.1:3000/#5e0065ee-5734-4548-9fd3-bb0bcd4c899d|mypass`.
         Note that you should correctly [percent
         encode](https://datatracker.ietf.org/doc/html/rfc3986) the `|` (pipe)
         character for it to work in all browsers.

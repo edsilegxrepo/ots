@@ -23,6 +23,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - **Zero-Allocation Buffer Pooling (`helpers.go`):** Implemented `sync.Pool` buffer recycling for Base64 decoding, eliminating GC heap allocation churn under high API load.
   - **Direct Binary Streaming (`POST /api/create/raw`):** Added `application/octet-stream` endpoint for files exceeding 10 MB, bypassing JSON and Base64 entirely for 0% encoding overhead.
 
+- **Milestone 4: UI UX Refinements & Testing Quality Strategy (80%+ Coverage Goal):**
+  - **HTML Sender Note Rendering (`src/components/secret-display.vue`):** Updated HTML message display to render rich formatted HTML only by default, providing an aligned `[ Show Code ]` toggle button to view sanitized HTML source code on demand.
+  - **Master Production Live E2E Integration Suite (`production_e2e_test.go`):** Implemented master live E2E integration suite validating 9 real-life production scenarios (Client SDK lifecycle, dual-channel split keys, premature secret burning, multi-read reusability counters, file extension security filters, raw streaming, storage caps, custom expiry overrides, and 20 parallel worker goroutines under high concurrency).
+  - **ForwardAuth IAM Proxy Protection E2E:** Added live reverse proxy header authentication E2E testing for Authelia / Traefik / Nginx (`X-Forwarded-User`, `X-Forwarded-Groups`).
+  - **Storage Engine Matrix E2E Verification:** Verified secret creation, attachment delivery, and one-time destruction across all 5 pluggable backends (Memory, SQLite, BadgerDB, Redis, Memcached).
+  - **Complete Removal of External Domain Dependencies:** Removed 100% of external `ots.fyi` domain references across CLI defaults, openapi specs, and SDK documentation, standardizing on local server endpoints (`http://127.0.0.1:3000/`).
+  - **Clean Test Artifact Guarantee:** Standardized 100% of test temporary directory objects on Go's `t.TempDir()`, preventing repository pollution.
+
 ---
 
 ## [v1.43.0] - 2026-08-07

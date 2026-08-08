@@ -899,3 +899,138 @@ func TestLiveServerPluggableStorageBackendsE2E(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleBurnSecretE2E(t *testing.T) {
+	allowedReadsList := []int{1, 2, 5}
+
+	for _, reads := range allowedReadsList {
+		t.Run(fmt.Sprintf("AllowedReads-%d", reads), func(t *testing.T) {
+			memStore := memory.New()
+			api := newAPI(memStore, testCollector)
+			r := mux.NewRouter()
+			api.Register(r.PathPrefix("/api").Subrouter())
+
+			server := httptest.NewServer(r)
+			defer server.Close()
+
+			// 1. Create secret with allowed reads count
+			payload := []byte(fmt.Sprintf("Burn test secret payload with %d reads", reads))
+			secretID, err := memStore.Create(payload, 10*time.Minute, reads)
+			require.NoError(t, err)
+			assert.NotEmpty(t, secretID)
+
+			// 2. Perform 1 read if reads > 1 to simulate initial receiver reveal
+			if reads > 1 {
+				readURL := fmt.Sprintf("%s/api/get/%s", server.URL, secretID)
+				resp, err := http.Get(readURL)
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				_ = resp.Body.Close()
+			}
+
+			// 3. Burn secret via POST /api/burn/{id}
+			burnURL := fmt.Sprintf("%s/api/burn/%s", server.URL, secretID)
+			burnReq, err := http.NewRequest(http.MethodPost, burnURL, nil)
+			require.NoError(t, err)
+
+			burnResp, err := http.DefaultClient.Do(burnReq)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, burnResp.StatusCode)
+
+			var burnJSON apiResponse
+			require.NoError(t, json.NewDecoder(burnResp.Body).Decode(&burnJSON))
+			_ = burnResp.Body.Close()
+			assert.True(t, burnJSON.Success)
+			assert.Equal(t, 0, burnJSON.ReadsRemaining)
+
+			// 4. Verify that subsequent GET /api/get/{id} returns HTTP 404 Not Found
+			getURL := fmt.Sprintf("%s/api/get/%s", server.URL, secretID)
+			getResp, err := http.Get(getURL)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
+			_ = getResp.Body.Close()
+
+			// 5. Verify that subsequent POST /api/burn/{id} also returns success with 0 remaining
+			burnResp2, err := http.DefaultClient.Do(burnReq)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, burnResp2.StatusCode)
+			var burnJSON2 apiResponse
+			require.NoError(t, json.NewDecoder(burnResp2.Body).Decode(&burnJSON2))
+			_ = burnResp2.Body.Close()
+			assert.True(t, burnJSON2.Success)
+			assert.Equal(t, 0, burnJSON2.ReadsRemaining)
+		})
+	}
+}
+
+func TestHandleBurnHandlerUnit(t *testing.T) {
+	t.Run("Unit-Direct-Handler-Execution", func(t *testing.T) {
+		memStore := memory.New()
+		api := newAPI(memStore, testCollector)
+
+		// Create secret with 3 allowed reads
+		secretID, err := memStore.Create([]byte("Unit test payload"), 5*time.Minute, 3)
+		require.NoError(t, err)
+
+		// Direct HTTP handler test
+		req := httptest.NewRequest(http.MethodPost, "/api/burn/"+secretID, nil)
+		req = mux.SetURLVars(req, map[string]string{"id": secretID})
+		rec := httptest.NewRecorder()
+
+		api.handleBurn(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var resp apiResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+		assert.True(t, resp.Success)
+		assert.Equal(t, 0, resp.ReadsRemaining)
+
+		// Verify store state is completely cleared
+		_, _, getErr := memStore.ReadAndDestroy(secretID)
+		assert.ErrorIs(t, getErr, storage.ErrSecretNotFound)
+	})
+
+	t.Run("Unit-Missing-ID-Returns-BadRequest", func(t *testing.T) {
+		memStore := memory.New()
+		api := newAPI(memStore, testCollector)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/burn/", nil)
+		req = mux.SetURLVars(req, map[string]string{"id": ""})
+		rec := httptest.NewRecorder()
+
+		api.handleBurn(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+func TestAPIExtendedErrorHandlingAndSettings(t *testing.T) {
+	api, _ := newTestAPI(t)
+
+	// 1. parseExpiryOverride tests
+	reqInvalidExp := httptest.NewRequest(http.MethodGet, "/api/create?expire=invalid_num", nil)
+	_, err := api.parseExpiryOverride(reqInvalidExp, 86400)
+	assert.Error(t, err)
+
+	reqNegExp := httptest.NewRequest(http.MethodGet, "/api/create?expire=-100", nil)
+	_, err = api.parseExpiryOverride(reqNegExp, 86400)
+	assert.Error(t, err)
+
+	reqZeroExp := httptest.NewRequest(http.MethodGet, "/api/create?expire=0", nil)
+	valZero, err := api.parseExpiryOverride(reqZeroExp, cfg.SecretExpiry)
+	require.NoError(t, err)
+	assert.Equal(t, cfg.SecretExpiry, valZero)
+
+	// 2. handleSettings test
+	reqSettings := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	wSettings := httptest.NewRecorder()
+	api.handleSettings(wSettings, reqSettings)
+	assert.Equal(t, http.StatusOK, wSettings.Code)
+	assert.Contains(t, wSettings.Body.String(), "acceptedFileTypes")
+
+	// 3. Form-urlencoded creation
+	formReq := httptest.NewRequest(http.MethodPost, "/api/create", strings.NewReader("secret=my_form_secret&reads=1"))
+	formReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	wForm := httptest.NewRecorder()
+	api.handleCreate(wForm, formReq)
+	assert.Equal(t, http.StatusCreated, wForm.Code)
+}

@@ -56,12 +56,12 @@ func TestSQLiteStorageInterfaceContract(t *testing.T) {
 	assert.Equal(t, 2, remaining)
 
 	// Read 2 (1 remaining)
-	content, remaining, err = store.ReadAndDestroy(id2)
+	_, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
 	assert.Equal(t, 1, remaining)
 
 	// Read 3 (0 remaining)
-	content, remaining, err = store.ReadAndDestroy(id2)
+	_, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
 
@@ -99,4 +99,34 @@ func TestSQLiteExpiration(t *testing.T) {
 
 	_, _, err = store.ReadAndDestroy(id)
 	assert.Equal(t, storage.ErrSecretNotFound, err)
+}
+
+func TestSQLitePurgeAndCleanup(t *testing.T) {
+	store, err := New("sqlite://:memory:")
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	// Test Purge
+	id, err := store.Create([]byte("purge_sqlite_payload"), time.Hour, 1)
+	require.NoError(t, err)
+
+	purged, err := store.Purge(id)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("purge_sqlite_payload"), purged)
+
+	// Purging deleted secret returns ErrSecretNotFound
+	_, err = store.Purge(id)
+	require.ErrorIs(t, err, storage.ErrSecretNotFound)
+
+	// Purge non-existent secret
+	_, err = store.Purge("missing-id")
+	require.ErrorIs(t, err, storage.ErrSecretNotFound)
+
+	// Test Expired Secret via ReadAndDestroy
+	expID, err := store.Create([]byte("expired_payload"), time.Millisecond, 1)
+	require.NoError(t, err)
+	time.Sleep(5 * time.Millisecond)
+
+	_, _, err = store.ReadAndDestroy(expID)
+	assert.ErrorIs(t, err, storage.ErrSecretNotFound)
 }

@@ -138,6 +138,12 @@ sequenceDiagram
 - **Pre-Parsed Proxy CIDR Evaluation:** Trusted proxy IP validation (`cust.TrustedProxies`) pre-compiles CIDR blocks (`ResolvedTrustedCIDRs`) and IP ranges (`ResolvedTrustedIPs`) during startup, ensuring zero runtime string parsing during HTTP IP extraction.
 - **Throttled Telemetry Updates:** Secret metrics calculation operates strictly on background 1-minute ticker routines, protecting backend storage engines (such as Redis) from unthrottled key scanning overhead under heavy API traffic.
 - **Horizontal Scaling via Redis:** When configured with `--storage-type=redis`, OTS operates completely stateless, allowing horizontal scaling behind load balancers with native Redis key TTL eviction.
+- **Atomic Single-Query Purging:** The `storage.Storage` interface defines `Purge(id string)`, allowing all backends (SQLite, BadgerDB, Redis, Memcached, In-Memory) to execute $O(1)$ single-pass key deletion without sequential decrement loops.
+- **Cross-Platform OS Optimizations:**
+  - **Windows:** Configures `PRAGMA locking_mode=NORMAL;` and connection idle limits (`SetMaxIdleConns(2)`) to ensure clean WAL file handle releases on process shutdown.
+  - **Linux/Unix:** Enables `PRAGMA mmap_size=268435456;` (256MB memory-mapped I/O) for high-concurrency kernel page caching.
+- **Zero-Dependency UUID Generation:** Generates RFC 4122 v4 UUIDs using Go standard library `crypto/rand` without third-party dependencies.
+- **Granular CLI Exit Codes:** `cmd/ots-cli` maps failure states to specific diagnostic exit codes (`ExitSuccess = 0`, `ExitGeneralError = 1`, `ExitInvalidArgs = 2`, `ExitNetworkError = 3`, `ExitSecretNotFound = 4`, `ExitDecryptionFailed = 5`).
 
 ---
 
@@ -239,5 +245,5 @@ graph TD
 ---
 
 ## 6. System References
-- **[PRODUCT.md](PRODUCT.md)** - Operational Guide, Security Assessment & Deployment Options
+- **[README.md](README.md)** - Operational Guide, Security Assessment & Deployment Options
 - **[TESTING.md](TESTING.md)** - Complete Test Suite Specifications, E2E Specifications, and Code Coverage Report

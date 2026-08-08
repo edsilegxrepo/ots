@@ -8,10 +8,10 @@ The simple format is the format used by OTS since day one and is the, well, most
 # openssl enc -aes-256-cbc -pbkdf2 -md sha512 -iter 300000 -pass pass:12345678 -a -A <<<"I'm a secret"
 U2FsdGVkX19G3GuIw3LGM0PVQmavPU/LnWvJhcLeYvs=
 
-# curl -H 'Content-Type: application/json' -d '{"secret": "U2FsdGVkX19G3GuIw3LGM0PVQmavPU/LnWvJhcLeYvs="}' https://ots.fyi/api/create
+# curl -H 'Content-Type: application/json' -d '{"secret": "U2FsdGVkX19G3GuIw3LGM0PVQmavPU/LnWvJhcLeYvs="}' http://127.0.0.1:3000/api/create
 {"success":true,"expires_at":"2023-10-11T19:45:01.315587714Z","secret_id":"bbd53ec5-8ee9-4df5-a630-9561313a348a"}
 
-# ots-cli fetch "https://ots.fyi/#bbd53ec5-8ee9-4df5-a630-9561313a348a%7C12345678"
+# ots-cli fetch "http://127.0.0.1:3000/#bbd53ec5-8ee9-4df5-a630-9561313a348a%7C12345678"
 INFO[0000] fetching secret...
 I'm a secret
 ```
@@ -41,9 +41,9 @@ INFO[0000] reading secret content...
 INFO[0000] attaching file...                             file=file.txt
 INFO[0000] creating the secret...
 INFO[0000] secret created, see URL below                 expires-at="2023-10-11 19:52:30.816059504 +0000 UTC"
-https://ots.fyi/#6a6be08c-97d7-4970-a202-5bb6964460d8%7CwNUURZ0LRrQAhaczdZfj
+http://127.0.0.1:3000/#6a6be08c-97d7-4970-a202-5bb6964460d8%7CwNUURZ0LRrQAhaczdZfj
 
-# curl -sS https://ots.fyi/api/get/6a6be08c-97d7-4970-a202-5bb6964460d8 | jq -r .secret >/tmp/secret.bin
+# curl -sS http://127.0.0.1:3000/api/get/6a6be08c-97d7-4970-a202-5bb6964460d8 | jq -r .secret >/tmp/secret.bin
 # openssl enc -aes-256-cbc -pbkdf2 -md sha512 -iter 300000 -pass pass:wNUURZ0LRrQAhaczdZfj -a -A -d </tmp/secret.bin
 OTSMeta{"secret":"I'm a secret\n","attachments":[{"name":"file.txt","type":"text/plain; charset=utf-8","data":"SSdtIGZpbGUgY29udGVudAo="}]}
 ```

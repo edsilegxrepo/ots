@@ -1,12 +1,14 @@
-<!-- eslint-disable vue/no-v-html -->
 <template>
-  <div class="card border-success-subtle mb-3">
+  <div :class="burned ? 'card border-danger-subtle shadow-sm mb-3' : 'card border-success-subtle mb-3'">
     <!-- Safe: Trusted internal translation string from i18n.yaml -->
     <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-    <div class="card-header bg-success-subtle d-flex justify-content-between align-items-center py-2">
+    <div :class="burned ? 'card-header bg-danger-subtle text-danger-emphasis d-flex justify-content-between align-items-center py-2 fw-bold' : 'card-header bg-success-subtle d-flex justify-content-between align-items-center py-2'">
       <!-- Safe: Trusted internal translation string from i18n.yaml -->
       <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-      <span v-html="$t('title-secret-created')" />
+      <span v-if="!burned" v-html="$t('title-secret-created')" />
+      <span v-else class="d-flex align-items-center">
+        <i class="fas fa-fire me-2 text-danger" /> Secret Permanently Burned
+      </span>
       <app-message-modal-button
         v-if="!burned"
         :secret-url="secretUrl"
@@ -43,11 +45,19 @@
         <button
           class="btn btn-danger"
           :title="$t('tooltip-burn-secret')"
-          @click="burnSecret"
+          @click="showBurnModal = true"
         >
           <i class="fas fa-fire fa-fw" />
         </button>
       </div>
+
+      <!-- Burn Confirmation Modal Popup (Sender) -->
+      <app-burn-modal
+        :show="showBurnModal"
+        :secret-id="secretId"
+        @close="showBurnModal = false"
+        @confirm="confirmBurnSecret"
+      />
 
       <!-- Dual Channel Link Section -->
       <div class="card bg-body-tertiary mb-3">
@@ -81,23 +91,20 @@
         </span>
       </p>
     </div>
-    <div
-      v-else
-      class="card-body"
-    >
-      {{ $t('text-secret-burned') }}
-    </div>
+    <app-burned-display v-else />
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
+import appBurnModal from "./burn-modal.vue";
+import appBurnedDisplay from "./burned-display.vue";
 import appClipboardButton from "./clipboard-button.vue";
 import appMessageModalButton from "./message-modal.vue";
 import appQrButton from "./qr-button.vue";
 
 export default defineComponent({
-	components: { appClipboardButton, appMessageModalButton, appQrButton },
+	components: { appBurnModal, appBurnedDisplay, appClipboardButton, appMessageModalButton, appQrButton },
 
 	computed: {
 		burnTime(): string {
@@ -136,15 +143,20 @@ export default defineComponent({
 		return {
 			burned: false,
 			countdownText: "",
+			showBurnModal: false,
 			timerId: null as number | null,
 		};
 	},
 
 	methods: {
-		burnSecret(): Promise<void> {
-			return fetch(`/api/get/${this.secretId}`).then(() => {
-				this.burned = true;
-			});
+		confirmBurnSecret(): Promise<void> {
+			return fetch(`/api/burn/${this.secretId}`, { method: "POST" })
+				.then((resp) => {
+					if (resp.ok) {
+						this.burned = true;
+						this.showBurnModal = false;
+					}
+				});
 		},
 
 		selectURL(): void {

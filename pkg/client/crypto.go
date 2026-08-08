@@ -21,9 +21,9 @@ const (
 	gcmHeaderMagic     = "OTSGCM1"
 	openSSLHeaderMagic = "Salted__"
 
-	gcmSaltSize     = 16
-	gcmNonceSize    = 12
-	gcmTagSize      = 16
+	gcmSaltSize      = 16
+	gcmNonceSize     = 12
+	gcmTagSize       = 16
 	gcmKDFIterations = 300000
 
 	pbkdf2Iterations = 300000
@@ -312,4 +312,3 @@ func zeroBytes(b []byte) {
 		b[i] = 0
 	}
 }
-

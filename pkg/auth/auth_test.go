@@ -266,3 +266,28 @@ func TestAuthMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, rec.Code)
 	})
 }
+
+func TestAuthExtendedConnectorAndPolicyValidation(t *testing.T) {
+	// Test LoadIAMConfig invalid YAML
+	_, err := LoadIAMConfig([]byte("invalid_yaml: ["))
+	require.Error(t, err)
+
+	// Test NewAuthMiddleware disabled IAM
+	cfgDisabled := IAMConfig{Enabled: false}
+	amDisabled, err := NewAuthMiddleware(cfgDisabled, nil)
+	require.NoError(t, err)
+	assert.False(t, amDisabled.config.Enabled)
+
+	// Test RBAC Default Policy Allow
+	var emptyGroups []string
+	policyAllow := IAMPolicy{
+		DefaultPolicy: "allow",
+		AllowedGroups: emptyGroups,
+	}
+	eval := NewRBACEvaluator(policyAllow, []string{"/api/create"})
+	id := &UserIdentity{Username: "bob", Groups: []string{"Users"}}
+	assert.True(t, eval.IsAuthorized(id))
+
+	// Test RBAC Nil User
+	assert.False(t, eval.IsAuthorized(nil))
+}

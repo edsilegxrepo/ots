@@ -21,27 +21,24 @@
       <button
         class="navbar-toggler"
         type="button"
-        data-bs-toggle="collapse"
-        data-bs-target="#navbarSupportedContent"
         aria-controls="navbarSupportedContent"
-        aria-expanded="false"
+        :aria-expanded="!isNavCollapsed"
         aria-label="Toggle navigation"
+        @click="isNavCollapsed = !isNavCollapsed"
       >
         <span class="navbar-toggler-icon" />
       </button>
 
       <div
         id="navbarSupportedContent"
-        class="collapse navbar-collapse"
+        :class="['collapse', 'navbar-collapse', { show: !isNavCollapsed }]"
       >
         <ul class="navbar-nav ms-auto mb-2 mb-lg-0 me-2">
           <li class="nav-item">
             <a
               class="nav-link"
               href="#"
-              data-bs-toggle="modal"
-              data-bs-target="#explanationModal"
-              @click.prevent
+              @click.prevent="$emit('show-explanation')"
             >
               <i class="fas fa-circle-info" /> {{ $t('btn-show-explanation') }}
             </a>
@@ -134,10 +131,11 @@ export default defineComponent({
 	data() {
 		return {
 			intTheme: "",
+			isNavCollapsed: true,
 		};
 	},
 
-	emits: ["navigate", "update:theme"],
+	emits: ["navigate", "update:theme", "show-explanation"],
 
 	mounted(): void {
 		this.intTheme = this.theme;

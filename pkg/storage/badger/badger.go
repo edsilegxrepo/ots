@@ -18,6 +18,7 @@ package badger
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -28,7 +29,6 @@ import (
 
 	badgerdb "github.com/dgraph-io/badger/v4"
 	"github.com/dgraph-io/badger/v4/options"
-	"github.com/gofrs/uuid"
 
 	"github.com/edsilegxrepo/ots/pkg/storage"
 )
@@ -126,15 +126,9 @@ func (s *Storage) Count() (int64, error) {
 
 // Create inserts a raw binary secret blob with native TTL expiration and total allowed reads
 func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
-	id := uuid.Must(uuid.NewV4()).String()
-	if reads < 1 {
-		reads = 1
-	}
-
-	var expiresAt time.Time
-	if expireIn > 0 {
-		expiresAt = time.Now().Add(expireIn)
-	}
+	id := storage.GenerateUUID()
+	reads = storage.NormalizeReads(reads)
+	expiresAt := storage.CalculateExpiry(expireIn)
 
 	entry := badgerSecretEntry{
 		Content:        payload,
@@ -230,4 +224,44 @@ func (s *Storage) ReadAndDestroy(id string) ([]byte, int, error) {
 	}
 
 	return content, readsRemaining, nil
+}
+
+// Purge immediately destroys a stored secret entry in BadgerDB
+func (s *Storage) Purge(id string) ([]byte, error) {
+	var content []byte
+	var notFound bool
+
+	err := s.db.Update(func(txn *badgerdb.Txn) error {
+		item, err := txn.Get([]byte(id))
+		if err != nil {
+			if errors.Is(err, badgerdb.ErrKeyNotFound) {
+				notFound = true
+				return storage.ErrSecretNotFound
+			}
+			return err
+		}
+
+		err = item.Value(func(val []byte) error {
+			var entry badgerSecretEntry
+			if err := json.Unmarshal(val, &entry); err != nil {
+				return err
+			}
+			content = entry.Content
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		return txn.Delete([]byte(id))
+	})
+
+	if notFound || errors.Is(err, badgerdb.ErrKeyNotFound) || errors.Is(err, storage.ErrSecretNotFound) {
+		return nil, storage.ErrSecretNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("badger purge transaction: %w", err)
+	}
+
+	return content, nil
 }

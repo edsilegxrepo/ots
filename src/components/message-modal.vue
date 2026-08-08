@@ -1,3 +1,11 @@
+<!--
+  AppMessageModalButton Component
+
+  Objectives:
+  - Renders the [ Generate Message ] modal trigger button and interactive enterprise message modal.
+  - Supports 4 template modes (Full Link, Dual Link, Dual Key, Combined Chat) and 4 output formats (Text, HTML, Markdown, JSON).
+  - Uses 100% reactive Vue state (showModal & activeTab) for reliable rendering without external jQuery/Bootstrap event binding.
+-->
 <template>
   <div>
     <!-- Trigger Button -->
@@ -5,8 +13,7 @@
       class="btn btn-success btn-sm text-white shadow-sm fw-semibold"
       type="button"
       :title="$t('tooltip-generate-message')"
-      data-bs-toggle="modal"
-      data-bs-target="#enterpriseMessageModal"
+      @click="showModal = true"
     >
       <i class="fas fa-envelope-open-text fa-fw me-1" />
       <span class="d-none d-md-inline">{{ $t('btn-generate-message') }}</span>
@@ -14,26 +21,23 @@
 
     <!-- Enterprise Message Modal -->
     <div
-      id="enterpriseMessageModal"
-      class="modal fade"
+      v-if="showModal"
+      class="modal fade show d-block"
       tabindex="-1"
-      aria-labelledby="enterpriseMessageModalLabel"
-      aria-hidden="true"
+      style="background-color: rgba(0, 0, 0, 0.6);"
+      @click.self="showModal = false"
     >
       <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header bg-info-subtle">
-            <h5
-              id="enterpriseMessageModalLabel"
-              class="modal-title"
-            >
+        <div class="modal-content shadow-lg border-info-subtle">
+          <div class="modal-header bg-info-subtle py-2">
+            <h5 class="modal-title fw-bold text-info-emphasis mb-0 d-flex align-items-center">
               <i class="fas fa-file-signature me-2" />{{ $t('title-message-modal') }}
             </h5>
             <button
               type="button"
               class="btn-close"
-              data-bs-dismiss="modal"
               aria-label="Close"
+              @click="showModal = false"
             />
           </div>
           <div class="modal-body">
@@ -49,11 +53,10 @@
                   role="presentation"
                 >
                   <button
-                    class="nav-link active"
-                    data-bs-toggle="tab"
-                    data-bs-target="#tab-full-link"
+                    :class="['nav-link', { active: activeTab === 'full-link' }]"
                     type="button"
                     role="tab"
+                    @click="activeTab = 'full-link'"
                   >
                     <i class="fas fa-link me-1" /> Full Link
                   </button>
@@ -63,11 +66,10 @@
                   role="presentation"
                 >
                   <button
-                    class="nav-link"
-                    data-bs-toggle="tab"
-                    data-bs-target="#tab-dual-link"
+                    :class="['nav-link', { active: activeTab === 'dual-link' }]"
                     type="button"
                     role="tab"
+                    @click="activeTab = 'dual-link'"
                   >
                     <i class="fas fa-shield-halved me-1" /> Dual (Link)
                   </button>
@@ -77,11 +79,10 @@
                   role="presentation"
                 >
                   <button
-                    class="nav-link"
-                    data-bs-toggle="tab"
-                    data-bs-target="#tab-dual-key"
+                    :class="['nav-link', { active: activeTab === 'dual-key' }]"
                     type="button"
                     role="tab"
+                    @click="activeTab = 'dual-key'"
                   >
                     <i class="fas fa-key me-1" /> Dual (Key)
                   </button>
@@ -91,11 +92,10 @@
                   role="presentation"
                 >
                   <button
-                    class="nav-link"
-                    data-bs-toggle="tab"
-                    data-bs-target="#tab-dual-combined"
+                    :class="['nav-link', { active: activeTab === 'dual-combined' }]"
                     type="button"
                     role="tab"
+                    @click="activeTab = 'dual-combined'"
                   >
                     <i class="fas fa-comments me-1" /> Combined Chat
                   </button>
@@ -170,162 +170,234 @@
             <div class="tab-content">
               <!-- Tab 1: Full Link Message -->
               <div
-                id="tab-full-link"
-                class="tab-pane fade show active"
+                v-if="activeTab === 'full-link'"
+                class="tab-pane active show"
                 role="tabpanel"
               >
                 <p class="small text-secondary mb-2">
                   Complete delivery template containing full secret decryption URL. (Format: {{ formatLabel }}).
                 </p>
-                <div class="position-relative mb-2">
+                <div
+                  v-if="selectedFormat !== 'html' || showHTMLCode"
+                  class="position-relative mb-2"
+                >
                   <textarea
                     class="form-control font-monospace small"
-                    rows="13"
+                    rows="10"
                     readonly
                     :value="fullLinkTemplate"
                   />
                 </div>
+                <div
+                  v-if="selectedFormat === 'html'"
+                  id="preview-tab1"
+                  class="rendered-html-preview border rounded p-3 mb-2 bg-white shadow-sm"
+                  v-html="fullLinkTemplate"
+                />
                 <div class="d-flex justify-content-end gap-2">
                   <button
-                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    v-if="selectedFormat === 'html'"
                     type="button"
-                    class="btn btn-outline-success shadow-sm"
-                    :class="{'btn-success text-white': copyRichSuccess}"
-                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
-                    @click="copyRichHTML(fullLinkTemplate)"
+                    class="btn btn-outline-danger shadow-sm"
+                    @click="showHTMLCode = !showHTMLCode"
+                  >
+                    <i :class="showHTMLCode ? 'fas fa-eye me-1' : 'fas fa-code me-1'" />
+                    {{ showHTMLCode ? 'Hide Code' : 'Show Code' }}
+                  </button>
+                  <button
+                    v-if="selectedFormat === 'html'"
+                    type="button"
+                    class="btn shadow-sm"
+                    :class="copyRichSuccess ? 'btn-success text-white' : 'btn-outline-success'"
+                    title="Copy formatted rich text to paste rendered cards into Outlook, Teams, Word, or Slack"
+                    @click="copyFormattedHTML(fullLinkTemplate, 'preview-tab1')"
                   >
                     <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
-                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                    {{ copyRichSuccess ? 'Copied Formatted HTML!' : 'Copy Formatted HTML' }}
                   </button>
                   <app-clipboard-button
                     :content="fullLinkTemplate"
                     title="Copy Full Link Message"
                     :show-label="true"
-                    label-text="Copy Raw"
+                    label-text="Copy Message"
                   />
                 </div>
               </div>
 
               <!-- Tab 2: Dual Channel Link Message -->
               <div
-                id="tab-dual-link"
-                class="tab-pane fade"
+                v-if="activeTab === 'dual-link'"
+                class="tab-pane active show"
                 role="tabpanel"
               >
                 <p class="small text-secondary mb-2">
                   Channel 1 Template (Email/Ticket): Short link without key. (Format: {{ formatLabel }}).
                 </p>
-                <div class="position-relative mb-2">
+                <div
+                  v-if="selectedFormat !== 'html' || showHTMLCode"
+                  class="position-relative mb-2"
+                >
                   <textarea
                     class="form-control font-monospace small"
-                    rows="13"
+                    rows="10"
                     readonly
                     :value="dualLinkTemplate"
                   />
                 </div>
+                <div
+                  v-if="selectedFormat === 'html'"
+                  id="preview-tab2"
+                  class="rendered-html-preview border rounded p-3 mb-2 bg-white shadow-sm"
+                  v-html="dualLinkTemplate"
+                />
                 <div class="d-flex justify-content-end gap-2">
                   <button
-                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    v-if="selectedFormat === 'html'"
                     type="button"
-                    class="btn btn-outline-success shadow-sm"
-                    :class="{'btn-success text-white': copyRichSuccess}"
-                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
-                    @click="copyRichHTML(dualLinkTemplate)"
+                    class="btn btn-outline-danger shadow-sm"
+                    @click="showHTMLCode = !showHTMLCode"
+                  >
+                    <i :class="showHTMLCode ? 'fas fa-eye me-1' : 'fas fa-code me-1'" />
+                    {{ showHTMLCode ? 'Hide Code' : 'Show Code' }}
+                  </button>
+                  <button
+                    v-if="selectedFormat === 'html'"
+                    type="button"
+                    class="btn shadow-sm"
+                    :class="copyRichSuccess ? 'btn-success text-white' : 'btn-outline-success'"
+                    title="Copy formatted rich text to paste rendered cards into Outlook, Teams, Word, or Slack"
+                    @click="copyFormattedHTML(dualLinkTemplate, 'preview-tab2')"
                   >
                     <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
-                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                    {{ copyRichSuccess ? 'Copied Formatted HTML!' : 'Copy Formatted HTML' }}
                   </button>
                   <app-clipboard-button
                     :content="dualLinkTemplate"
                     title="Copy Dual Link Message"
                     :show-label="true"
-                    label-text="Copy Raw"
+                    label-text="Copy Link Message"
                   />
                 </div>
               </div>
 
               <!-- Tab 3: Dual Channel Key Message -->
               <div
-                id="tab-dual-key"
-                class="tab-pane fade"
+                v-if="activeTab === 'dual-key'"
+                class="tab-pane active show"
                 role="tabpanel"
               >
                 <p class="small text-secondary mb-2">
                   Channel 2 Template (SMS/Teams/Slack): Decryption key only. (Format: {{ formatLabel }}).
                 </p>
-                <div class="position-relative mb-2">
+                <div
+                  v-if="selectedFormat !== 'html' || showHTMLCode"
+                  class="position-relative mb-2"
+                >
                   <textarea
                     class="form-control font-monospace small"
-                    rows="10"
+                    rows="8"
                     readonly
                     :value="dualKeyTemplate"
                   />
                 </div>
+                <div
+                  v-if="selectedFormat === 'html'"
+                  id="preview-tab3"
+                  class="rendered-html-preview border rounded p-3 mb-2 bg-white shadow-sm"
+                  v-html="dualKeyTemplate"
+                />
                 <div class="d-flex justify-content-end gap-2">
                   <button
-                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    v-if="selectedFormat === 'html'"
                     type="button"
-                    class="btn btn-outline-success shadow-sm"
-                    :class="{'btn-success text-white': copyRichSuccess}"
-                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
-                    @click="copyRichHTML(dualKeyTemplate)"
+                    class="btn btn-outline-danger shadow-sm"
+                    @click="showHTMLCode = !showHTMLCode"
+                  >
+                    <i :class="showHTMLCode ? 'fas fa-eye me-1' : 'fas fa-code me-1'" />
+                    {{ showHTMLCode ? 'Hide Code' : 'Show Code' }}
+                  </button>
+                  <button
+                    v-if="selectedFormat === 'html'"
+                    type="button"
+                    class="btn shadow-sm"
+                    :class="copyRichSuccess ? 'btn-success text-white' : 'btn-outline-success'"
+                    title="Copy formatted rich text to paste rendered cards into Outlook, Teams, Word, or Slack"
+                    @click="copyFormattedHTML(dualKeyTemplate, 'preview-tab3')"
                   >
                     <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
-                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                    {{ copyRichSuccess ? 'Copied Formatted HTML!' : 'Copy Formatted HTML' }}
                   </button>
                   <app-clipboard-button
                     :content="dualKeyTemplate"
                     title="Copy Decryption Key Message"
                     :show-label="true"
-                    label-text="Copy Raw"
+                    label-text="Copy Key Message"
                   />
                 </div>
               </div>
 
               <!-- Tab 4: Combined Chat Notice -->
               <div
-                id="tab-dual-combined"
-                class="tab-pane fade"
+                v-if="activeTab === 'dual-combined'"
+                class="tab-pane active show"
                 role="tabpanel"
               >
                 <p class="small text-secondary mb-2">
                   Combined notice formatted for instant pasting into internal chat tools or API pipelines. (Format: {{ formatLabel }}).
                 </p>
-                <div class="position-relative mb-2">
+                <div
+                  v-if="selectedFormat !== 'html' || showHTMLCode"
+                  class="position-relative mb-2"
+                >
                   <textarea
                     class="form-control font-monospace small"
-                    rows="11"
+                    rows="8"
                     readonly
                     :value="combinedChatTemplate"
                   />
                 </div>
+                <div
+                  v-if="selectedFormat === 'html'"
+                  id="preview-tab4"
+                  class="rendered-html-preview border rounded p-3 mb-2 bg-white shadow-sm"
+                  v-html="combinedChatTemplate"
+                />
                 <div class="d-flex justify-content-end gap-2">
                   <button
-                    v-if="selectedFormat === 'html' || selectedFormat === 'md'"
+                    v-if="selectedFormat === 'html'"
                     type="button"
-                    class="btn btn-outline-success shadow-sm"
-                    :class="{'btn-success text-white': copyRichSuccess}"
-                    title="Copy formatted rich text to paste into Outlook, Teams, Word, or Slack"
-                    @click="copyRichHTML(combinedChatTemplate)"
+                    class="btn btn-outline-danger shadow-sm"
+                    @click="showHTMLCode = !showHTMLCode"
+                  >
+                    <i :class="showHTMLCode ? 'fas fa-eye me-1' : 'fas fa-code me-1'" />
+                    {{ showHTMLCode ? 'Hide Code' : 'Show Code' }}
+                  </button>
+                  <button
+                    v-if="selectedFormat === 'html'"
+                    type="button"
+                    class="btn shadow-sm"
+                    :class="copyRichSuccess ? 'btn-success text-white' : 'btn-outline-success'"
+                    title="Copy formatted rich text to paste rendered cards into Outlook, Teams, Word, or Slack"
+                    @click="copyFormattedHTML(combinedChatTemplate, 'preview-tab4')"
                   >
                     <i :class="copyRichSuccess ? 'fas fa-check me-1' : 'fas fa-wand-magic-sparkles me-1'" />
-                    {{ copyRichSuccess ? 'Copied for Outlook/Teams!' : 'Copy Rich HTML (Outlook/Teams)' }}
+                    {{ copyRichSuccess ? 'Copied Formatted HTML!' : 'Copy Formatted HTML' }}
                   </button>
                   <app-clipboard-button
                     :content="combinedChatTemplate"
                     title="Copy Combined Chat Notice"
                     :show-label="true"
-                    label-text="Copy Raw"
+                    label-text="Copy Combined Notice"
                   />
                 </div>
               </div>
             </div>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer py-2">
             <button
               type="button"
-              class="btn btn-secondary"
-              data-bs-dismiss="modal"
+              class="btn btn-secondary btn-sm"
+              @click="showModal = false"
             >
               Close
             </button>
@@ -546,52 +618,86 @@ export default defineComponent({
 			// Plain Text Default
 			return `===================================================================\n             CONFIDENTIAL ONE-TIME SECRET [${this.secretId}]\n===================================================================\n\nNOTE: ${expNote}\n\nA secure, encrypted one-time secret has been generated for you.\n\n-------------------------------------------------------------------\nSECRET URL:\n${this.secretUrl}\n-------------------------------------------------------------------\n\nIMPORTANT INSTRUCTIONS:\n1. Accessing this URL decrypts the payload and PERMANENTLY BURNS\n   (deletes) the secret from the server.\n2. Please copy or store the content immediately upon opening.\n\n===================================================================`;
 		},
-
-		copyRichHTML(templateString: string): void {
-			let htmlString = templateString;
-			if (this.selectedFormat === "md") {
-				htmlString = `<div style="font-family: Arial, sans-serif; border: 1px solid #0d6efd; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">` +
-					templateString
-						.replace(/### (.*?)\n/g, "<h3 style='color: #0b5ed7; margin-top: 0;'>$1</h3>")
-						.replace(/> \[!WARNING\]\n> (.*?)\n/g, "<div style='background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 8px; margin: 10px 0;'><strong>NOTE:</strong> $1</div>")
-						.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-						.replace(/`(.*?)`/g, "<code style='background: #e9ecef; padding: 2px 4px; border-radius: 4px;'>$1</code>")
-						.replace(/- \*\*(.*?)\*\*: (.*?)\n/g, "<p style='margin: 4px 0;'><strong>$1:</strong> <a href='$2'>$2</a></p>")
-						.replace(/\n/g, "<br>") +
-					`</div>`;
-			}
-
-			try {
-				const htmlBlob = new Blob([htmlString], { type: "text/html" });
-				const textBlob = new Blob([templateString], { type: "text/plain" });
-				const item = new ClipboardItem({
-					"text/html": htmlBlob,
-					"text/plain": textBlob,
-				});
-
-				navigator.clipboard.write([item]).then(() => {
-					this.copyRichSuccess = true;
-					window.setTimeout(() => {
-						this.copyRichSuccess = false;
-					}, 2000);
-				});
-			} catch (_err) {
-				// Fallback to text copy if ClipboardItem text/html is unsupported
-				navigator.clipboard.writeText(templateString).then(() => {
-					this.copyRichSuccess = true;
-					window.setTimeout(() => {
-						this.copyRichSuccess = false;
-					}, 2000);
-				});
-			}
-		},
 	},
 
 	data() {
 		return {
+			activeTab: "full-link",
 			copyRichSuccess: false,
+			copyRichTimeout: null as number | null,
 			selectedFormat: "text", // "text", "html", "md", "json"
+			showHTMLCode: false,
+			showModal: false,
 		};
+	},
+
+	methods: {
+		async copyFormattedHTML(templateText: string, elementId?: string): Promise<void> {
+			let success = false;
+
+			if (elementId) {
+				const targetEl = document.getElementById(elementId);
+				if (targetEl) {
+					const selection = window.getSelection();
+					const range = document.createRange();
+					range.selectNodeContents(targetEl);
+					if (selection) {
+						selection.removeAllRanges();
+						selection.addRange(range);
+					}
+					try {
+						success = document.execCommand("copy");
+					} catch (_e) {
+						success = false;
+					}
+					if (selection) {
+						selection.removeAllRanges();
+					}
+				}
+			}
+
+			if (!success) {
+				try {
+					const htmlBlob = new Blob([templateText], { type: "text/html" });
+					const textBlob = new Blob([templateText], { type: "text/plain" });
+					await navigator.clipboard.write([
+						new ClipboardItem({
+							"text/html": htmlBlob,
+							"text/plain": textBlob,
+						}),
+					]);
+					success = true;
+				} catch (_err) {
+					const listener = (e: ClipboardEvent) => {
+						e.preventDefault();
+						if (e.clipboardData) {
+							e.clipboardData.setData("text/html", templateText);
+							e.clipboardData.setData("text/plain", templateText);
+						}
+					};
+
+					document.addEventListener("copy", listener);
+					try {
+						document.execCommand("copy");
+						success = true;
+					} catch (_e2) {
+						navigator.clipboard.writeText(templateText);
+					} finally {
+						document.removeEventListener("copy", listener);
+					}
+				}
+			}
+
+			if (success) {
+				this.copyRichSuccess = true;
+				if (this.copyRichTimeout) {
+					window.clearTimeout(this.copyRichTimeout);
+				}
+				this.copyRichTimeout = window.setTimeout(() => {
+					this.copyRichSuccess = false;
+				}, 2500);
+			}
+		},
 	},
 
 	name: "AppMessageModalButton",

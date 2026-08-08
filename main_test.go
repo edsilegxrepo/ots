@@ -250,3 +250,36 @@ func TestLogFilePathWriting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(content), `"msg":"written to file log"`)
 }
+
+func TestGetEnvOrDefaultHelpers(t *testing.T) {
+	// String helper
+	t.Setenv("TEST_ENV_STR", "custom_val")
+	assert.Equal(t, "custom_val", getEnvOrDefault("TEST_ENV_STR", "default"))
+	assert.Equal(t, "fallback", getEnvOrDefault("NON_EXISTENT_ENV_KEY", "fallback"))
+
+	// Bool helper
+	t.Setenv("TEST_ENV_BOOL", "true")
+	assert.True(t, getEnvOrDefaultBool("TEST_ENV_BOOL", false))
+	t.Setenv("TEST_ENV_BOOL", "invalid")
+	assert.False(t, getEnvOrDefaultBool("TEST_ENV_BOOL", false))
+
+	// Int64 helper
+	t.Setenv("TEST_ENV_INT", "42")
+	assert.Equal(t, int64(42), getEnvOrDefaultInt64("TEST_ENV_INT", 10))
+	t.Setenv("TEST_ENV_INT", "not_a_number")
+	assert.Equal(t, int64(10), getEnvOrDefaultInt64("TEST_ENV_INT", 10))
+}
+
+func TestDefaultCSP(t *testing.T) {
+	csp := defaultCSP()
+	assert.NotEmpty(t, csp)
+	assert.Contains(t, csp.String(), "default-src 'none'")
+	assert.Contains(t, csp.String(), "script-src 'self'")
+}
+
+func TestInitAppValidation(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "invalid_level")
+	err := initApp()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing log-level")
+}

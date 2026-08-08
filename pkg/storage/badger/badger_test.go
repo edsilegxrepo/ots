@@ -56,12 +56,12 @@ func TestBadgerStorageInterfaceContract(t *testing.T) {
 	assert.Equal(t, 2, remaining)
 
 	// Read 2 (1 remaining)
-	content, remaining, err = store.ReadAndDestroy(id2)
+	_, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
 	assert.Equal(t, 1, remaining)
 
 	// Read 3 (0 remaining)
-	content, remaining, err = store.ReadAndDestroy(id2)
+	_, remaining, err = store.ReadAndDestroy(id2)
 	require.NoError(t, err)
 	assert.Equal(t, 0, remaining)
 
@@ -84,4 +84,33 @@ func TestBadgerDiskStorage(t *testing.T) {
 	assert.Equal(t, 0, remaining)
 
 	require.NoError(t, store.Close())
+}
+
+func TestBadgerPurgeAndExpiredFallback(t *testing.T) {
+	store, err := New("")
+	require.NoError(t, err)
+	defer func() { _ = store.Close() }()
+
+	// Test Purge
+	id, err := store.Create([]byte("purge_badger_payload"), time.Hour, 1)
+	require.NoError(t, err)
+
+	purged, err := store.Purge(id)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("purge_badger_payload"), purged)
+
+	_, err = store.Purge(id)
+	require.ErrorIs(t, err, storage.ErrSecretNotFound)
+
+	// Purge missing secret
+	_, err = store.Purge("non-existent-badger-id")
+	require.ErrorIs(t, err, storage.ErrSecretNotFound)
+
+	// Test Expired Fallback in ReadAndDestroy
+	expID, err := store.Create([]byte("expired_payload"), 1*time.Millisecond, 1)
+	require.NoError(t, err)
+	time.Sleep(5 * time.Millisecond)
+
+	_, _, err = store.ReadAndDestroy(expID)
+	assert.ErrorIs(t, err, storage.ErrSecretNotFound)
 }

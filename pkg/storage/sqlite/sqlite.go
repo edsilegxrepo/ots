@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/gofrs/uuid"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // SQLite database driver registration
 
 	"github.com/edsilegxrepo/ots/pkg/storage"
 )
@@ -73,6 +73,13 @@ func New(connStr string) (*Storage, error) {
 	_, _ = db.Exec("PRAGMA synchronous=NORMAL;")
 	_, _ = db.Exec("PRAGMA temp_store=MEMORY;")
 	_, _ = db.Exec("PRAGMA cache_size=-64000;") // 64MB Page Cache RAM
+
+	if runtime.GOOS == "windows" {
+		db.SetMaxIdleConns(2)
+		_, _ = db.Exec("PRAGMA locking_mode=NORMAL;")
+	} else {
+		_, _ = db.Exec("PRAGMA mmap_size=268435456;") // 256MB Memory Mapped I/O on Linux/Unix
+	}
 
 	// Initialize table schema
 	schema := `
@@ -139,15 +146,9 @@ func (s *Storage) Count() (int64, error) {
 
 // Create inserts a raw binary secret blob with total allowed reads and returns its ID
 func (s *Storage) Create(payload []byte, expireIn time.Duration, reads int) (string, error) {
-	id := uuid.Must(uuid.NewV4()).String()
-	if reads < 1 {
-		reads = 1
-	}
-
-	var expiresAt int64
-	if expireIn > 0 {
-		expiresAt = time.Now().Add(expireIn).Unix()
-	}
+	id := storage.GenerateUUID()
+	reads = storage.NormalizeReads(reads)
+	expiresAt := storage.CalculateExpiryUnix(expireIn)
 
 	query := "INSERT INTO secrets (id, payload, reads, expires_at) VALUES (?, ?, ?, ?);"
 	_, err := s.db.Exec(query, id, payload, reads, expiresAt)
@@ -211,4 +212,36 @@ func (s *Storage) ReadAndDestroy(id string) ([]byte, int, error) {
 	}
 
 	return payload, readsRemaining, nil
+}
+
+// Purge immediately destroys a stored secret entry in a single atomic SQL transaction
+func (s *Storage) Purge(id string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var payload []byte
+	err = tx.QueryRowContext(ctx, "SELECT payload FROM secrets WHERE id = ?;", id).Scan(&payload)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, storage.ErrSecretNotFound
+		}
+		return nil, fmt.Errorf("sqlite select payload: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, "DELETE FROM secrets WHERE id = ?;", id)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite purge delete: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("sqlite commit purge: %w", err)
+	}
+
+	return payload, nil
 }

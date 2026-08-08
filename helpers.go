@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -230,4 +231,15 @@ func DecodeBase64Pooled(s string) ([]byte, error) {
 	res := make([]byte, n)
 	copy(res, buf[:n])
 	return res, nil
+}
+
+// GenerateUUID returns an RFC 4122 compliant version 4 UUID string using Go core crypto/rand
+func GenerateUUID() string {
+	var b [16]byte
+	if _, err := io.ReadFull(rand.Reader, b[:]); err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // Version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // Variant RFC 4122
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }

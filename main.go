@@ -1,3 +1,20 @@
+// The OTS Main Server Entrypoint
+//
+// Objectives:
+// - Initializes OTS HTTP server configuration, CLI flags, TLS hardening, and storage drivers.
+// - Bootstraps embedded Vue 3 frontend single-page application assets and CSP security policy.
+// - Provides graceful server shutdown signal listeners for clean database and connection flushes.
+//
+// Core Components:
+// - main: Server entrypoint initializing flags, storage, HTTP router, listener, and signal traps.
+// - parseFlags: Command line parameter loader for storage drivers, ports, TLS certs, and logs.
+// - hardenListener: Network socket hardening forcing loopback binding when TLS is unconfigured.
+// - defaultCSP: Content Security Policy header builder protecting frontend script execution.
+//
+// Data Flow:
+// 1. main() -> parseFlags() -> Instantiates storage driver (sqlite/badger/memory/redis/memcached).
+// 2. Registers REST API routes and static asset handlers -> Listens on TCP port.
+// 3. SIGTERM/SIGINT -> Gracefully shuts down HTTP server and closes DB handles.
 package main
 
 import (

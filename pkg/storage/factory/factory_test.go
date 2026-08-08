@@ -51,9 +51,9 @@ func TestCreateStorageEngineFactory(t *testing.T) {
 
 	// Invalid URL parse error
 	_, err = CreateStorageEngine(":%invalid_url")
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	// Unsupported scheme
 	_, err = CreateStorageEngine("ftp://localhost")
-	assert.Error(t, err)
+	require.Error(t, err)
 }
