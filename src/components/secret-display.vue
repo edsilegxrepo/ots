@@ -153,9 +153,6 @@
           <i class="fas fa-circle-info me-2" />
           {{ $t('text-reads-remaining-info', { count: readsRemaining }) }}
         </div>
-        <!-- Safe: Trusted internal translation string from i18n.yaml -->
-        <!-- nosemgrep: javascript.vue.security.audit.xss.templates.avoid-v-html.avoid-v-html -->
-        <p v-else v-html="$t('text-hint-burned')" />
       </template>
     </div>
   </div>
