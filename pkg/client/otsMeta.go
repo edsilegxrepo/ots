@@ -33,7 +33,7 @@ var metaMarker = []byte("OTSMeta")
 
 func (o *Secret) read(data []byte, passphrase string) (err error) {
 	if passphrase != "" {
-		if data, err = DecryptOpenSSL(passphrase, data); err != nil {
+		if data, err = Decrypt(passphrase, data); err != nil {
 			return fmt.Errorf("decrypting data: %w", err)
 		}
 	}
@@ -82,7 +82,7 @@ func (o Secret) serialize(passphrase string) ([]byte, error) {
 		return data, nil
 	}
 
-	out, err := EncryptOpenSSL(passphrase, data)
+	out, err := Encrypt(passphrase, data)
 	if err != nil {
 		return nil, fmt.Errorf("encrypting data: %w", err)
 	}

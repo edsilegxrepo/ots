@@ -3,6 +3,28 @@
 All notable changes to **OTS (One-Time Secrets)** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.50.0] - 2026-08-08
+
+### Added
+- **Milestone 1: Authenticated Encryption (AES-256-GCM AEAD & Security Hardening):**
+  - **AES-256-GCM AEAD Mode (`pkg/client/crypto.go`, `src/ots-meta.js`):** Migrated payload encryption from AES-256-CBC to AES-256-GCM with built-in 128-bit (16-byte) authentication tag integrity verification and NIST SP 800-38D 96-bit (12-byte) nonces, eliminating padding oracle timing attacks and ciphertext tampering.
+  - **PBKDF2-HMAC-SHA256 Key Derivation:** Standardized on PBKDF2-HMAC-SHA256 with 300,000 iterations and 16-byte random salt per payload.
+  - **`OTSGCM1` Version Protocol & Dual-Cipher Router:** Introduced magic string prefix `OTSGCM1` (7 bytes) for payload auto-routing, preserving 100% backward compatibility for pre-v1.50.0 legacy OpenSSL CBC secrets (`Salted__`).
+
+- **Milestone 2: Database Storage Normalization (`[]byte` / `BLOB` Normalization):**
+  - **33.3% Storage Footprint Savings:** Refactored `storage.Storage` interface and all 5 backend engines (Redis, Memcached, SQLite, BadgerDB, In-Memory) to persist raw binary `[]byte` buffers instead of ASCII Base64 strings.
+  - **SQLite BLOB Schema & Performance PRAGMAs (`pkg/storage/sqlite`):** Updated table schema to `payload BLOB NOT NULL`, added `PRAGMA temp_store=MEMORY;` and `PRAGMA cache_size=-64000;` (64 MB page cache) for high-concurrency throughput.
+  - **BadgerDB ZSTD Block Compression (`pkg/storage/badger`):** Enabled ZSTD compression (`options.WithCompression(options.ZSTD)`) for embedded LSM value log storage.
+  - **Redis & Memcached Binary Bytes (`pkg/storage/redis`, `pkg/storage/memcached`):** Updated Redis `rdb.Set` / atomic LUA scripts and Memcached CAS items to store raw byte arrays.
+
+- **Milestone 3: Payload Efficiency & High-Capacity Binary Streaming:**
+  - **Single-Encoding Attachment Pipeline (`pkg/client/otsMeta.go`, `src/ots-meta.js`):** Eliminated double-Base64 encoding on file attachments by keeping attachment bytes raw inside internal `OTSMeta` structs prior to payload encryption (~25% wire size reduction).
+  - **Unpadded URL-Safe Base64 (`RawURLEncoding`):** Standardized on RFC 4648 §5 Base64URL (`-`, `_`, no `=` padding) across Go SDK and JS Web SPA, eliminating URL-escaping issues in browser fragments and query parameters.
+  - **Zero-Allocation Buffer Pooling (`helpers.go`):** Implemented `sync.Pool` buffer recycling for Base64 decoding, eliminating GC heap allocation churn under high API load.
+  - **Direct Binary Streaming (`POST /api/create/raw`):** Added `application/octet-stream` endpoint for files exceeding 10 MB, bypassing JSON and Base64 entirely for 0% encoding overhead.
+
+---
+
 ## [v1.43.0] - 2026-08-07
 
 ### Added

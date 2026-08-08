@@ -6,6 +6,7 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/subtle"
 	"encoding/base64"
@@ -17,16 +18,158 @@ import (
 )
 
 const (
+	gcmHeaderMagic     = "OTSGCM1"
 	openSSLHeaderMagic = "Salted__"
-	pbkdf2Iterations   = 300000
-	aesKeySize         = 32
-	aesIVSize          = 16
+
+	gcmSaltSize     = 16
+	gcmNonceSize    = 12
+	gcmTagSize      = 16
+	gcmKDFIterations = 300000
+
+	pbkdf2Iterations = 300000
+	aesKeySize       = 32
+	aesIVSize        = 16
 )
 
 var (
-	ErrInvalidCiphertext = errors.New("invalid OpenSSL ciphertext format")
-	ErrDecryptionFailed = errors.New("decryption failed: invalid key or payload")
+	ErrInvalidCiphertext       = errors.New("invalid ciphertext format or magic header")
+	ErrDecryptionFailed        = errors.New("decryption failed: invalid key or payload")
+	ErrGCMAuthenticationFailed = errors.New("authentication tag mismatch: payload has been tampered with")
 )
+
+// Encrypt encrypts plaintext using AES-256-GCM with PBKDF2-HMAC-SHA256 (300000 iterations).
+// It returns a Base64-encoded string representation of the self-contained OTSGCM1 payload.
+func Encrypt(passphrase string, plaintext []byte) ([]byte, error) {
+	return EncryptGCM(passphrase, plaintext)
+}
+
+// Decrypt decrypts encrypted payload by auto-detecting OTSGCM1 (GCM) vs Salted__ (legacy OpenSSL CBC).
+func Decrypt(passphrase string, data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	// Auto-decode Base64 if needed
+	raw := data
+	if bytes.HasPrefix(data, []byte("T1RTR0NN")) || bytes.HasPrefix(data, []byte("U2FsdGVkX1")) || !bytes.HasPrefix(data, []byte(gcmHeaderMagic)) && !bytes.HasPrefix(data, []byte(openSSLHeaderMagic)) {
+		decoded, err := decodeBase64Flexible(string(data))
+		if err == nil && len(decoded) > 0 {
+			raw = decoded
+		}
+	}
+
+	if bytes.HasPrefix(raw, []byte(gcmHeaderMagic)) {
+		return DecryptGCM(passphrase, raw)
+	}
+
+	if bytes.HasPrefix(raw, []byte(openSSLHeaderMagic)) {
+		return DecryptOpenSSL(passphrase, raw)
+	}
+
+	// Retry DecryptGCM then DecryptOpenSSL as fallbacks if header magic was embedded inside raw input
+	if unpadded, err := DecryptGCM(passphrase, data); err == nil {
+		return unpadded, nil
+	} else if errors.Is(err, ErrGCMAuthenticationFailed) {
+		return nil, ErrGCMAuthenticationFailed
+	}
+	if unpadded, err := DecryptOpenSSL(passphrase, data); err == nil {
+		return unpadded, nil
+	}
+
+	return nil, ErrDecryptionFailed
+}
+
+// EncryptGCM encrypts plaintext using AES-256-GCM and PBKDF2-HMAC-SHA256.
+// Output binary format: Header ("OTSGCM1", 7B) || Salt (16B) || Nonce (12B) || Ciphertext + Tag (16B)
+func EncryptGCM(passphrase string, plaintext []byte) ([]byte, error) {
+	if len(plaintext) == 0 {
+		return nil, nil
+	}
+
+	salt := make([]byte, gcmSaltSize)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return nil, fmt.Errorf("generating salt: %w", err)
+	}
+
+	key := pbkdf2.Key([]byte(passphrase), salt, gcmKDFIterations, aesKeySize, sha256.New)
+	defer zeroBytes(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM mode: %w", err)
+	}
+
+	nonce := make([]byte, gcmNonceSize)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("generating nonce: %w", err)
+	}
+
+	// Seal appends ciphertext + 16-byte auth tag
+	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+
+	// Build self-contained payload: Header (7B) || Salt (16B) || Nonce (12B) || Ciphertext+Tag
+	raw := make([]byte, 0, len(gcmHeaderMagic)+gcmSaltSize+gcmNonceSize+len(ciphertext))
+	raw = append(raw, []byte(gcmHeaderMagic)...)
+	raw = append(raw, salt...)
+	raw = append(raw, nonce...)
+	raw = append(raw, ciphertext...)
+
+	return []byte(base64.StdEncoding.EncodeToString(raw)), nil
+}
+
+// DecryptGCM decrypts payload using AES-256-GCM, verifying authentication tag.
+func DecryptGCM(passphrase string, data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	raw := data
+	if bytes.HasPrefix(data, []byte("T1RTR0NN")) || !bytes.HasPrefix(data, []byte(gcmHeaderMagic)) {
+		decoded, err := decodeBase64Flexible(string(data))
+		if err == nil && bytes.HasPrefix(decoded, []byte(gcmHeaderMagic)) {
+			raw = decoded
+		}
+	}
+
+	minLen := len(gcmHeaderMagic) + gcmSaltSize + gcmNonceSize + gcmTagSize
+	if len(raw) < minLen || !bytes.HasPrefix(raw, []byte(gcmHeaderMagic)) {
+		return nil, ErrInvalidCiphertext
+	}
+
+	offset := len(gcmHeaderMagic)
+	salt := raw[offset : offset+gcmSaltSize]
+	offset += gcmSaltSize
+
+	nonce := raw[offset : offset+gcmNonceSize]
+	offset += gcmNonceSize
+
+	ciphertext := raw[offset:]
+
+	key := pbkdf2.Key([]byte(passphrase), salt, gcmKDFIterations, aesKeySize, sha256.New)
+	defer zeroBytes(key)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("creating GCM mode: %w", err)
+	}
+
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, ErrGCMAuthenticationFailed
+	}
+
+	return plaintext, nil
+}
 
 // EncryptOpenSSL AES-256-CBC encrypts plaintext using PBKDF2 (SHA-512, 300000 iterations) in standard OpenSSL format.
 func EncryptOpenSSL(passphrase string, plaintext []byte) ([]byte, error) {
@@ -65,20 +208,20 @@ func DecryptOpenSSL(passphrase string, data []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	// Support base64 encoded input strings (e.g. "U2FsdGVkX1...")
-	if bytes.HasPrefix(data, []byte("U2FsdGVkX1")) {
-		decoded, err := base64.StdEncoding.DecodeString(string(data))
-		if err == nil {
-			data = decoded
+	raw := data
+	if bytes.HasPrefix(data, []byte("U2FsdGVkX1")) || !bytes.HasPrefix(data, []byte(openSSLHeaderMagic)) {
+		decoded, err := decodeBase64Flexible(string(data))
+		if err == nil && bytes.HasPrefix(decoded, []byte(openSSLHeaderMagic)) {
+			raw = decoded
 		}
 	}
 
-	if len(data) < 16 || !bytes.HasPrefix(data, []byte(openSSLHeaderMagic)) {
+	if len(raw) < 16 || !bytes.HasPrefix(raw, []byte(openSSLHeaderMagic)) {
 		return nil, ErrInvalidCiphertext
 	}
 
-	salt := data[8:16]
-	ciphertext := data[16:]
+	salt := raw[8:16]
+	ciphertext := raw[16:]
 
 	if len(ciphertext)%aes.BlockSize != 0 {
 		return nil, ErrInvalidCiphertext
@@ -153,3 +296,20 @@ func pkcs7Unpadding(data []byte, blockSize int) ([]byte, error) {
 	}
 	return data[:length-padding], nil
 }
+
+func decodeBase64Flexible(s string) ([]byte, error) {
+	if decoded, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return decoded, nil
+	}
+	if decoded, err := base64.RawURLEncoding.DecodeString(s); err == nil {
+		return decoded, nil
+	}
+	return base64.URLEncoding.DecodeString(s)
+}
+
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+

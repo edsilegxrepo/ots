@@ -356,7 +356,7 @@ const internalMaxFileSize = 64 * 1024 * 1024; // 64 MiB
 
 const passwordCharset =
 	"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const passwordLength = 20;
+const passwordLength = 32;
 const passwordRandomLimit =
 	Math.floor(256 / passwordCharset.length) * passwordCharset.length;
 

@@ -224,3 +224,34 @@ func TestCLIBurnAndInfoE2EAgainstLiveServer(t *testing.T) {
 	err = infoRunE(infoCmd, []string{server.URL})
 	require.NoError(t, err)
 }
+
+func TestCLI_AES256GCM_E2EAgainstLiveServer(t *testing.T) {
+	// Create valid encrypted GCM payload using client SDK
+	secretID := "gcm-test-uuid-5678"
+	secretKey, err := generateRandomPassword(32)
+	require.NoError(t, err)
+	assert.Len(t, secretKey, 32)
+
+	gcmCiphertext, err := client.EncryptGCM(secretKey, []byte("Live AES-256-GCM Encrypted Payload"))
+	require.NoError(t, err)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/get/"+secretID {
+			respData, _ := json.Marshal(map[string]any{
+				"secret":          string(gcmCiphertext),
+				"reads_remaining": 0,
+			})
+			_, _ = w.Write(respData)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	// Fetch and decrypt GCM payload via client SDK
+	secURL := server.URL + "/#" + secretID + "|" + secretKey
+	fetched, err := client.Fetch(secURL)
+	require.NoError(t, err)
+	assert.Equal(t, "Live AES-256-GCM Encrypted Payload", fetched.Secret)
+}

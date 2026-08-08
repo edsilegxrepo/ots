@@ -52,7 +52,7 @@ var HTTPClient HTTPClientIntf = http.DefaultClient
 var Logger *logrus.Entry
 
 // PasswordLength defines the length of the generated encryption password
-var PasswordLength = 20
+var PasswordLength = 32
 
 // RequestTimeout defines how long the request to the OTS instance for
 // create and fetch may take
