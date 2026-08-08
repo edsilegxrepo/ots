@@ -73,6 +73,8 @@ Upon inspecting src/components/secret-display.vue (lines 18-24), a full Zip bund
 | src/components/create.vue | Form Shortcuts | Add Cmd+Enter / Ctrl+Enter creation shortcut | Faster workflow for power users |
 | src/components/display-url.vue | Secret Link | Add QR Code generator modal for instant mobile scanning | Easy mobile link sharing |
 | src/components/secret-display.vue | Secret Receiver | Add live countdown timer for expiring secrets | Visual time-to-live awareness |
+| src/components/message-modal.vue | Sender Modal | Add JSON icon & Multi-MIME "Copy Rich HTML" button for Outlook/Teams | Formatted rich text pasting in Outlook & Teams |
+| src/components/secret-display.vue | Secret Receiver | Add Rendered / Raw Source Code toggle for received notes | Flexibility to inspect raw HTML/MD source |
 
 ---
 
@@ -89,3 +91,20 @@ Upon inspecting src/components/secret-display.vue (lines 18-24), a full Zip bund
 
 4. **Visual Segmented Controls for Expiry & Reads (`src/components/create.vue`):**
    - Replaces standard HTML select dropdowns with sleek segmented pill buttons for quick 1-tap selection of lifetime duration and read count limits.
+
+---
+
+## 8. Sender & Receiver Message Formatting Refinements
+
+### A. Sender Message Modal Icon Standardization (`src/components/message-modal.vue`)
+- Update the JSON format radio button label icon in `src/components/message-modal.vue` to `<i class="fas fa-brackets-curly me-1" />` (or `<i class="fas fa-code me-1" />`) to ensure a high-contrast icon displays consistently across all browsers and theme modes.
+
+### B. Multi-MIME "Copy Rich HTML" for Outlook & Teams Compatibility (`src/components/message-modal.vue`)
+- **Problem Statement:** Standard browser copy actions write payloads exclusively as `text/plain`. When pasted into Microsoft Outlook, Microsoft Teams, Slack, or Word, the text is pasted as raw code (`<div style="...">...</div>` or `### Header`) rather than rendered formatted cards.
+- **Enhancement:** Add a **"Copy Rich HTML"** button (`<button class="btn btn-outline-success">`) equipped with a render icon (`<i class="fas fa-wand-magic-sparkles me-1" />`) alongside standard copy controls.
+- **Clipboard Mechanism:** Uses `navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })])` to write both `text/html` and `text/plain` MIME types to the OS clipboard concurrently.
+- **User Impact:** When pasted into Outlook or Teams, the client reads the `text/html` payload from the clipboard and **renders the rich HTML card natively with colored alert boxes, links, and bold typography**. Markdown templates are automatically converted to styled HTML prior to clipboard write.
+
+### C. Receiver Note Display & Raw Source Toggle (`src/components/secret-display.vue`)
+- **Current Behavior:** Decrypted notes are automatically rendered as XSS-sanitized HTML (`v-html`) for HTML/MD notes, pretty-printed code for JSON notes, and monospaced text for plain text notes.
+- **Enhancement:** Add a **"Rendered / Raw Source"** toggle button on the receiver note display card, allowing receivers to seamlessly switch between viewing the rendered HTML/Markdown visual card and inspecting the un-rendered raw source code text.
