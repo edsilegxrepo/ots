@@ -70,3 +70,22 @@ Upon inspecting src/components/secret-display.vue (lines 18-24), a full Zip bund
 | src/components/create.vue | Secret Creation | Upgrade auto-key to 32 chars, add "Gen Pass" button & Strength Meter | Higher passphrase entropy matching AES-256 |
 | src/components/secret-display.vue | Secret Receiver | Add Burn Warning Banner & Direct "Save as Text (.txt)" shortcut | Prevents accidental data loss |
 | src/components/navbar.vue | Header | Preserve High-Contrast Auto / Dark / Light theme toggle | Enhanced night-mode accessibility |
+| src/components/create.vue | Form Shortcuts | Add Cmd+Enter / Ctrl+Enter creation shortcut | Faster workflow for power users |
+| src/components/display-url.vue | Secret Link | Add QR Code generator modal for instant mobile scanning | Easy mobile link sharing |
+| src/components/secret-display.vue | Secret Receiver | Add live countdown timer for expiring secrets | Visual time-to-live awareness |
+
+---
+
+## 7. Additional Enterprise UI / UX Polish Roadmap
+
+1. **Cmd/Ctrl + Enter Keyboard Shortcut (`src/components/create.vue`):**
+   - Pressing `Cmd + Enter` (macOS) or `Ctrl + Enter` (Windows/Linux) inside the secret creation textarea automatically submits the form, accelerating secret creation for DevOps & SRE power users.
+
+2. **QR Code Generator for Secret Sharing (`src/components/display-url.vue`):**
+   - Adds an optional 1-click QR code display toggle on the generated URL page, allowing users to scan secret links directly onto mobile phones without manually copying text.
+
+3. **Active Secret TTL Countdown Timer (`src/components/secret-display.vue`):**
+   - Displays a dynamic real-time expiration countdown timer (*"Expires in 59m 42s"*) on active secret view pages before redemption.
+
+4. **Visual Segmented Controls for Expiry & Reads (`src/components/create.vue`):**
+   - Replaces standard HTML select dropdowns with sleek segmented pill buttons for quick 1-tap selection of lifetime duration and read count limits.
