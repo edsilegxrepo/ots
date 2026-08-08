@@ -13,19 +13,8 @@
           {{ $t('text-message-received') }}
         </span>
       </div>
-      <div class="d-flex gap-2">
-        <a
-          v-if="secret"
-          class="btn btn-sm btn-outline-secondary shadow-sm"
-          :href="secretContentBlobURL || ''"
-          download="secret.txt"
-          title="Save secret payload as plain text (.txt)"
-        >
-          <i class="fas fa-file-lines me-1" />
-          Save .txt
-        </a>
+      <div v-if="secret || files.length > 0" class="d-flex gap-2">
         <button
-          v-if="secret || files.length > 0"
           class="btn btn-sm btn-outline-primary shadow-sm"
           :disabled="isGeneratingBundle"
           @click="downloadBundle"
