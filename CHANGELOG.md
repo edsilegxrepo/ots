@@ -3,6 +3,31 @@
 All notable changes to **OTS (One-Time Secrets)** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.50.1] - 2026-08-12
+
+### Added
+- **Master E2E Integration & UI Testing Suite (`tests/`, `src/components/message-modal.test.ts`):**
+  - Added Authelia OIDC/ForwardAuth integration test configuration suite in `tests/config/authelia/` and `tests/docker-compose.authelia.yml`.
+  - Added Playwright browser E2E test suite setup (`tests/playwright.config.ts`, `tests/ui/chromium-resolver.ts`, `tests/ui/e2e/ui-browser.spec.ts`).
+  - Added Vitest Vue UI component test setup (`tests/vitest.config.mts`, `src/components/message-modal.test.ts`).
+- **CLI Management & Timeout Enhancements (`cmd/ots-cli/`):**
+  - Expanded `ots-cli` with user management commands (`user add`, `user list`, `user disable`, `user delete`).
+  - Added `OTS_CLIENT_TIMEOUT` environment variable support and `-t` / `--timeout` override flags for CLI secret retrieval.
+
+### Changed
+- Unified compilation outputs (`ots`, `ots-cli`, `translate`) to `testfiles/bin/`.
+- Hardened Windows MSYS2 build execution in `Makefile` and `ci/packager.sh`.
+- Standardized `.gitignore` using standard template with dedicated `# Repo Specific` rules.
+
+### Refactored
+- Reorganized system documentation, Dockerfile, and Compose manifests into `docs/`.
+- Verified all 65 translation keys across 16 languages against English authority (`i18n.yaml`).
+
+### Removed
+- Purged obsolete CI workflows (`.github/workflows/`), `.forgejo/`, `.dockerignore`, `.git_changerelease.yaml`, and dead scripts.
+
+---
+
 ## [v1.50.0] - 2026-08-08
 
 ### Added
@@ -164,4 +189,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-For historical release records prior to v1.30.0, see [History.md](History.md).
+> **Historical Reference & Attribution:** This repository serves as an independent enterprise edition of OTS, built upon and referencing [https://github.com/Luzifer/ots](https://github.com/Luzifer/ots) as a historical reference foundation prior to undergoing complete architecture, security, and component modernization.
+
+For historical release records prior to v1.30.0, see [History.md](docs/History.md).
