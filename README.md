@@ -103,7 +103,7 @@ The codebase adheres strictly to Go and TypeScript best practices, enforced by c
 | Environment Variable | Storage Driver | Data Type | Default Value | Description |
 |---|---|---|---|---|
 | `REDIS_URL` | Redis | `string` | `""` | Connection URL (`redis://<user>:<password>@<host>:<port>/<db_number>`). Required when `--storage-type=redis`. |
-| `REDIS_KEY` | Redis | `string` | `"io.luzifer.ots"` | Key prefix used for stored secrets in Redis keyspace. |
+| `REDIS_KEY` | Redis | `string` | `"io.ots.secret"` | Key prefix used for stored secrets in Redis keyspace. |
 | `MEMCACHED_URL` | Memcached | `string` | `"127.0.0.1:11211"` | Host address/port for Memcached daemon cluster. |
 | `STORAGE_URL` | Unified Factory | `string` | `""` | Unified storage DSN (`memory://`, `sqlite://`, `badger://`, `redis://`, `memcached://`). |
 
@@ -241,4 +241,4 @@ To translate the application into another language:
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System Architecture, Cryptographic Sequence Flows, and Package Map
 - **[TESTING.md](TESTING.md)** - Complete Test Suite Specifications, E2E Specifications, and Code Coverage Report
-- **[AUTH.md](AUTH.md)** - Identity & Access Management, ForwardAuth Proxy, and Argon2id Directory Specs
+- **[AUTH.md](docs/AUTH.md)** - Identity & Access Management, ForwardAuth Proxy, and Argon2id Directory Specs

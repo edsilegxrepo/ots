@@ -438,11 +438,11 @@ fi
 # Sub-Step 6.2: Build & Execute i18n Translation Generation Tool (ci/translate)
 if [ -d "ci/translate" ]; then
   echo "==> Generating i18n translations..."
-  if ! (cd ci/translate && go build -o translate_tool main.go 2> /dev/null); then
-    (cd ci/translate && go build -o translate_tool)
+  mkdir -p testfiles/bin
+  if ! (cd ci/translate && go build -o "../../testfiles/bin/translate_tool" main.go 2> /dev/null); then
+    (cd ci/translate && go build -o "../../testfiles/bin/translate_tool")
   fi
-  ./ci/translate/translate_tool || { echo "ERROR: i18n translation generation failed" >&2; exit 1; }
-  rm -f ci/translate/translate_tool ci/translate/translate_tool.exe 2> /dev/null || true
+  ./testfiles/bin/translate_tool || { echo "ERROR: i18n translation generation failed" >&2; exit 1; }
 fi
 
 # Sub-Step 6.3: Immediately Restore Original i18n.yaml Configuration

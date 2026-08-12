@@ -1,25 +1,7 @@
-.build
-ci/translate/translate
-customize.yaml
-frontend/api.html
-frontend/app.css
-frontend/app.js
-frontend/app.js.LICENSE.txt
-frontend/css
-frontend/js
-frontend/locale/*.untranslated.json
-frontend/*.ttf
-frontend/webfonts
-frontend/*.woff2
-node_modules
-ots
-translate-issue.md
-testfiles/
-*.exe~
-
 # Binaries
 *.bin
 *.exe
+*.exe~
 *.dll
 *.lib
 *.so
@@ -48,6 +30,7 @@ __pycache__/
 # Secrets and environment
 .env
 *.key
+*.env
 *.crt
 *.pem
 *.p12
@@ -63,22 +46,27 @@ keys/
 *.tmp
 *.test
 *.log
+coverage*
 temp/
 tmp/
 out/
 log/
 logs/
+go.work
 
 # Data
 *.db
 data/
 db/
+testfiles/
 testsamples/
 
 # Backup files (sequences)
 *.bk??
 
 # Build files
+releases/
+build/
 .editorconfig
 .windsurf
 .antigravity
@@ -95,6 +83,7 @@ walkthrough*.md
 implementation_plan*.md
 code_review_report*.md
 tasks.md
+*.tar.gz
 
 # Code Review tooling
 repomix-output.xml
@@ -105,3 +94,16 @@ repomix.config.json
 
 # --- Vendor / Local Assets ---
 **/mermaid.min.js
+
+# Repo Specific
+customize.yaml
+frontend/api.html
+frontend/app.css
+frontend/app.js
+frontend/app.js.LICENSE.txt
+frontend/css
+frontend/js
+frontend/locale/*.untranslated.json
+frontend/*.ttf
+frontend/webfonts
+frontend/*.woff2

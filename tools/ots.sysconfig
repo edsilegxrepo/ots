@@ -5,7 +5,7 @@
 # Redis connection string redis://USER:PWD@HOST:PORT/DB
 REDIS_URL="redis://default:__PASSWORD__@127.0.0.1:6379/0"
 
-# Key prefix to store the keys under (Default io.luzifer.ots)
+# Key prefix to store the keys under (Default io.ots.secret)
 REDIS_KEY="com.__ENTITY__.ots"
 
 # Expiry of the keys in seconds (Default 0 = no expiry)

@@ -1,0 +1,15 @@
+appTitle: "OTS - One Time Secrets"
+customBannerHTML: '<i class="fas fa-shield-halved me-2"></i><strong>Security Notice:</strong> All secrets are encrypted locally in your browser using AES-256-GCM before transmission. The server never receives plain data or decryption keys.'
+disablePoweredBy: true
+maxSecretReads: 5
+
+# Allowed attachment file types and group aliases (@images, @office, @security-files)
+acceptedFileTypes: ".png, .jpg, .jpeg, .pdf, .docx, .xlsx, .zip, .7z, @security-files"
+
+footerLinks:
+  - name: "Privacy Policy"
+    url: "https://example.com/privacy"
+  - name: "Imprint"
+    url: "https://example.com/imprint"
+  - name: "Terms of Service"
+    url: "https://example.com/terms"

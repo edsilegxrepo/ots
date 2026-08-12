@@ -16,12 +16,13 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().String("log-level", "info", "Level to use for logging (trace, debug, info, warn, error, fatal)")
+	rootCmd.PersistentFlags().Duration("timeout", 0, "HTTP request timeout for communicating with OTS instance (e.g. 15s, 1m)")
 }
 
 func rootPersistentPreRunE(cmd *cobra.Command, _ []string) error {
-	sll, err := cmd.Flags().GetString("log-level")
+	sll, err := cmd.PersistentFlags().GetString("log-level")
 	if err != nil {
-		return fmt.Errorf("getting log-level: %w", err)
+		sll = "info"
 	}
 
 	ll, err := logrus.ParseLevel(sll)
@@ -29,6 +30,11 @@ func rootPersistentPreRunE(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("parsing log-level: %w", err)
 	}
 	logrus.SetLevel(ll)
+
+	timeout, err := cmd.PersistentFlags().GetDuration("timeout")
+	if err == nil && timeout > 0 {
+		client.RequestTimeout = timeout
+	}
 
 	client.Logger = logrus.NewEntry(logrus.StandardLogger())
 

@@ -7,7 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -82,9 +82,10 @@ func createRunE(cmd *cobra.Command, args []string) (err error) {
 			return fmt.Errorf("reading attachment %q: %w", f, err)
 		}
 
+		cleanPath := filepath.ToSlash(f)
 		secret.Attachments = append(secret.Attachments, client.SecretAttachment{
-			Name:    path.Base(f),
-			Type:    mime.TypeByExtension(path.Ext(f)),
+			Name:    filepath.Base(cleanPath),
+			Type:    mime.TypeByExtension(filepath.Ext(cleanPath)),
 			Content: content,
 		})
 	}

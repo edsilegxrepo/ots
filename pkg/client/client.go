@@ -26,6 +26,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -55,19 +56,25 @@ var Logger *logrus.Entry
 var PasswordLength = 32
 
 // RequestTimeout defines how long the request to the OTS instance for
-// create and fetch may take
+// create and fetch may take. Can be overridden programmatically or via OTS_CLIENT_TIMEOUT env var.
 var RequestTimeout = 5 * time.Second
 
 // UserAgent defines the user-agent to send when interacting with an
 // OTS instance. When using this library please set this to something
 // the operator of the instance can determine your client from and
 // provide an URL to useful information about your tool.
-var UserAgent = "ots-client/1.x +https://github.com/Luzifer/ots"
+var UserAgent = "ots-client/1.x +https://github.com/edsilegxrepo/ots"
 
 func init() {
 	l := logrus.New()
 	l.SetOutput(io.Discard)
 	Logger = logrus.NewEntry(l)
+
+	if env := os.Getenv("OTS_CLIENT_TIMEOUT"); env != "" {
+		if d, err := time.ParseDuration(env); err == nil && d > 0 {
+			RequestTimeout = d
+		}
+	}
 }
 
 // CreateOpts specifies configurable parameters for secret creation in the Go client SDK.

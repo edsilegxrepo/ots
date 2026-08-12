@@ -1,4 +1,15 @@
-PRODUCT_VERSION := v1.21.9
+OTS_VERSION ?= dev
+PRODUCT_VERSION := $(OTS_VERSION)
+
+BIN_DIR := testfiles/bin
+IS_WINDOWS := $(findstring Windows,$(OS))
+EXEC_EXT := $(if $(IS_WINDOWS),.exe,)
+
+PNPM := $(if $(IS_WINDOWS),cmd /c pnpm,pnpm)
+
+OTS_BIN := $(BIN_DIR)/ots$(EXEC_EXT)
+CLI_BIN := $(BIN_DIR)/ots-cli$(EXEC_EXT)
+TRANSLATE_BIN := $(BIN_DIR)/translate$(EXEC_EXT)
 
 default: build-local
 
@@ -10,13 +21,22 @@ build-local: frontend generate-apidocs
 		-ldflags "-s -w -buildid= -X main.version=$(PRODUCT_VERSION)" \
 		-mod=readonly \
 		-trimpath \
-		-o ots
-
-ci/translate/translate:
-	cd ci/translate && go build
+		-o $(OTS_BIN)
+	cd cmd/ots-cli && go build \
+		-buildvcs=false \
+		-ldflags "-s -w -buildid= -X main.version=$(PRODUCT_VERSION)" \
+		-mod=readonly \
+		-trimpath \
+		-o "../../$(CLI_BIN)"
+	cd ci/translate && go build \
+		-buildvcs=false \
+		-ldflags "-s -w -buildid= -X main.version=$(PRODUCT_VERSION)" \
+		-mod=readonly \
+		-trimpath \
+		-o "../../$(TRANSLATE_BIN)"
 
 generate-apidocs: node_modules
-	pnpm redocly \
+	$(PNPM) redocly \
 		--disableGoogleFont true \
 		-o frontend/api.html \
 		build-docs docs/openapi.yaml
@@ -25,20 +45,56 @@ frontend_prod: export NODE_ENV=production
 frontend_prod: frontend
 
 frontend: node_modules
-	pnpm node ci/build.mjs
+	$(PNPM) node ci/build.mjs
 
 frontend_lint: node_modules
-	pnpm eslint --fix src
+	$(PNPM) eslint --fix src
 
 node_modules:
-	pnpm install --production=false --frozen-lockfile
+	$(PNPM) install --production=false --frozen-lockfile
 
 publish: export NODE_ENV=production
 publish: frontend_prod generate-apidocs
-	bash ./ci/build.sh
+	bash ./ci/packager.sh
 
-translate: ci/translate/translate
-	ci/translate/translate --write-issue-file
+translate:
+	$(TRANSLATE_BIN)
+
+# -- Testing (elevated timeouts for Windows WSL Docker & VM latency) --
+
+IS_WINDOWS := $(findstring Windows,$(OS))
+
+test:
+	go test -v ./...
+	cd cmd/ots-cli && go test -v .
+ifdef IS_WINDOWS
+	cmd /c pnpm test:ui
+else
+	pnpm test:ui
+endif
+
+test-e2e:
+	go test -v -tags=e2e -timeout 20m ./...
+	cd cmd/ots-cli && go test -v -tags=e2e -timeout 20m .
+ifdef IS_WINDOWS
+	cmd /c pnpm test:ui:e2e
+else
+	pnpm test:ui:e2e
+endif
+
+test-ui:
+ifdef IS_WINDOWS
+	cmd /c pnpm test:ui
+else
+	pnpm test:ui
+endif
+
+test-ui-e2e:
+ifdef IS_WINDOWS
+	cmd /c pnpm test:ui:e2e
+else
+	pnpm test:ui:e2e
+endif
 
 # -- Vulnerability scanning --
 
@@ -53,4 +109,4 @@ trivy:
 		--severity HIGH,CRITICAL \
 		--skip-dirs docs,node_modules
 
-.PHONY: ci/translate/translate node_modules
+.PHONY: node_modules translate

@@ -345,12 +345,25 @@ func setupHTTPHandler(api *APIServer) http.Handler {
 		}).Info("IAM Authentication middleware enabled")
 	}
 
+	hdl = securityHeadersMiddleware(hdl)
 	hdl = gzipMiddleware(hdl)
 	if cfg.LogRequests {
 		hdl = httpLoggerMiddleware(hdl)
 	}
 
 	return hdl
+}
+
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer-when-downgrade")
+		if cfg.EnableTLS {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func assetDelivery(w http.ResponseWriter, r *http.Request) {

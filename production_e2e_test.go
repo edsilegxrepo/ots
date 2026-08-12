@@ -1,3 +1,5 @@
+//go:build e2e
+
 // Package main - Production Real-Life Live E2E Integration Test Suite
 //
 // Test Strategy Explanation:
@@ -14,6 +16,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -328,6 +333,123 @@ func TestForwardAuthIAMProtectionE2E(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, respAuthorized.StatusCode)
 }
 
+func TestLocalAuthIAMProtectionE2E(t *testing.T) {
+	memStore := memory.New()
+	api := newAPI(memStore, testCollector)
+
+	tmpDir := t.TempDir()
+	usersFile := filepath.Join(tmpDir, "users.yaml")
+
+	passHash, err := auth.HashPassword("SuperSecret123!")
+	require.NoError(t, err)
+
+	localAuth, err := auth.NewLocalAuthenticator(usersFile)
+	require.NoError(t, err)
+
+	err = localAuth.AddUser(auth.UserRecord{
+		Username: "bob",
+		Hash:     passHash,
+		Email:    "bob@company.com",
+		Groups:   []string{"OTS-Creators"},
+	})
+	require.NoError(t, err)
+
+	iamCfg := auth.IAMConfig{
+		Enabled:            true,
+		Connector:          "local",
+		ProtectedEndpoints: []string{"/api/create"},
+		Policy: auth.IAMPolicy{
+			DefaultPolicy: "deny",
+			AllowedGroups: []string{"OTS-Creators"},
+		},
+	}
+
+	authMw, err := auth.NewAuthMiddleware(iamCfg, localAuth)
+	require.NoError(t, err)
+
+	router := mux.NewRouter()
+	router.Use(authMw.Handler)
+	api.Register(router.PathPrefix("/api").Subrouter())
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// 1. Unauthenticated request to /api/create returns 401 Unauthorized
+	reqUnauth, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create", strings.NewReader(`{"secret":"test"}`))
+	require.NoError(t, err)
+	reqUnauth.Header.Set("Content-Type", "application/json")
+	respUnauth, err := http.DefaultClient.Do(reqUnauth)
+	require.NoError(t, err)
+	_ = respUnauth.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respUnauth.StatusCode)
+	assert.Equal(t, `Basic realm="OTS Authentication Required"`, respUnauth.Header.Get("WWW-Authenticate"))
+
+	// 2. Unauthenticated request to /api/create/raw returns 401 Unauthorized
+	reqRawUnauth, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create/raw", strings.NewReader(`raw_data`))
+	require.NoError(t, err)
+	respRawUnauth, err := http.DefaultClient.Do(reqRawUnauth)
+	require.NoError(t, err)
+	_ = respRawUnauth.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respRawUnauth.StatusCode)
+
+	// 3. Invalid HTTP Basic credentials return 401 Unauthorized
+	reqInvalid, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create", strings.NewReader(`{"secret":"test"}`))
+	require.NoError(t, err)
+	reqInvalid.SetBasicAuth("bob", "WrongPassword!")
+	respInvalid, err := http.DefaultClient.Do(reqInvalid)
+	require.NoError(t, err)
+	_ = respInvalid.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respInvalid.StatusCode)
+
+	// 3b. Valid credentials for user in unauthorized group (Guests) return 403 Forbidden
+	err = localAuth.AddUser(auth.UserRecord{
+		Username: "charlie",
+		Hash:     passHash,
+		Email:    "charlie@company.com",
+		Groups:   []string{"Guests"},
+	})
+	require.NoError(t, err)
+
+	reqForbidden, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create", strings.NewReader(`{"secret":"test"}`))
+	require.NoError(t, err)
+	reqForbidden.SetBasicAuth("charlie", "SuperSecret123!")
+	respForbidden, err := http.DefaultClient.Do(reqForbidden)
+	require.NoError(t, err)
+	_ = respForbidden.Body.Close()
+	assert.Equal(t, http.StatusForbidden, respForbidden.StatusCode)
+
+	// 4. Valid HTTP Basic credentials allow creation via Client SDK (201 Created)
+	origClient := client.HTTPClient
+	defer func() { client.HTTPClient = origClient }()
+
+	client.HTTPClient = &basicAuthClient{
+		username: "bob",
+		password: "SuperSecret123!",
+		client:   http.DefaultClient,
+	}
+
+	secretURL, _, err := client.Create(server.URL, client.Secret{Secret: "Authenticated Local User Secret"}, time.Hour)
+	require.NoError(t, err)
+	assert.NotEmpty(t, secretURL)
+
+	// 5. Redemption endpoint (GET /api/get/:id) remains public & unauthenticated
+	client.HTTPClient = http.DefaultClient
+	fetchedSecret, err := client.Fetch(secretURL)
+	require.NoError(t, err)
+	assert.Equal(t, "Authenticated Local User Secret", fetchedSecret.Secret)
+}
+
+type basicAuthClient struct {
+	username string
+	password string
+	client   *http.Client
+}
+
+func (b *basicAuthClient) Do(req *http.Request) (*http.Response, error) {
+	req.SetBasicAuth(b.username, b.password)
+	return b.client.Do(req)
+}
+
 func TestAllFiveStorageBackendsLiveE2E(t *testing.T) {
 	backends := []struct {
 		name string
@@ -379,4 +501,131 @@ func TestAllFiveStorageBackendsLiveE2E(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestAutheliaContainerLiveE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping live Authelia container test in short mode")
+	}
+
+	// 1. Cross-platform detection: Windows WSL Docker vs Linux Native Docker
+	isWindows := runtime.GOOS == "windows"
+	if isWindows {
+		if _, err := exec.LookPath("wsl.exe"); err != nil {
+			t.Skip("wsl.exe not found on Windows host; skipping Authelia container test")
+		}
+	} else {
+		if _, err := exec.LookPath("docker"); err != nil {
+			t.Skip("docker binary not found on Linux host; skipping Authelia container test")
+		}
+	}
+
+	// 2. Query live Authelia container on port 9091 (residing in WSL Docker / Linux Docker)
+	autheliaURL := "http://127.0.0.1:9091"
+	respHealth, err := http.Get(autheliaURL + "/api/health")
+	if err != nil || respHealth.StatusCode != http.StatusOK {
+		t.Skip("Live Authelia container on port 9091 not reachable; skipping container assertion")
+	}
+	_ = respHealth.Body.Close()
+
+	// 3. Assert real Authelia container rejects unauthenticated verify with 401 Unauthorized
+	respVerifyUnauth, err := http.Get(autheliaURL + "/api/verify")
+	require.NoError(t, err)
+	_ = respVerifyUnauth.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respVerifyUnauth.StatusCode)
+
+	// 4. Assert real Authelia container rejects invalid password with 401 Unauthorized
+	respLoginFail, err := http.Post(autheliaURL+"/api/firstfactor", "application/json", strings.NewReader(`{"username":"john","password":"wrongpassword"}`))
+	require.NoError(t, err)
+	_ = respLoginFail.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respLoginFail.StatusCode)
+
+	// 5. Setup native OTS HTTP server loaded with live Authelia ForwardAuth configuration
+	memStore := memory.New()
+	api := newAPI(memStore, testCollector)
+
+	iamCfg := auth.IAMConfig{
+		Enabled:            true,
+		Connector:          "forwardauth",
+		ProtectedEndpoints: []string{"/api/create", "/api/create/raw"},
+		Policy: auth.IAMPolicy{
+			DefaultPolicy: "deny",
+			AllowedGroups: []string{"Engineering", "OTS-Creators"},
+		},
+		Connectors: auth.IAMConnectors{
+			ForwardAuth: auth.ForwardAuthConfig{
+				Enabled:         true,
+				UserHeader:      "Remote-User",
+				EmailHeader:     "Remote-Email",
+				GroupsHeader:    "Remote-Groups",
+				HeaderDelimiter: ",",
+				TrustedProxies:  []string{"127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"},
+			},
+		},
+	}
+
+	authMw, err := auth.NewAuthMiddleware(iamCfg, nil)
+	require.NoError(t, err)
+
+	router := mux.NewRouter()
+	router.Use(authMw.Handler)
+	api.Register(router.PathPrefix("/api").Subrouter())
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// 6. Test unauthenticated request to native OTS returns 401 Unauthorized
+	reqUnauth, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create", strings.NewReader(`{"secret":"test"}`))
+	require.NoError(t, err)
+	respUnauth, err := http.DefaultClient.Do(reqUnauth)
+	require.NoError(t, err)
+	_ = respUnauth.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, respUnauth.StatusCode)
+
+	// 7. Test authenticated request with Authelia user headers (john in Engineering) via Client SDK returns 201 Created
+	origClient := client.HTTPClient
+	defer func() { client.HTTPClient = origClient }()
+
+	client.HTTPClient = &forwardAuthHeaderClient{
+		user:   "john@example.com",
+		email:  "john@example.com",
+		groups: "Engineering,OTS-Creators",
+		client: http.DefaultClient,
+	}
+
+	secretURL, _, err := client.Create(server.URL, client.Secret{Secret: "Authelia Container Session Secret"}, time.Hour)
+	require.NoError(t, err)
+	assert.NotEmpty(t, secretURL)
+
+	// 8. Test unauthorized user (guest in Guests group) returns 403 Forbidden
+	reqForbidden, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/api/create", strings.NewReader(`{"secret":"test"}`))
+	require.NoError(t, err)
+	reqForbidden.Header.Set("Content-Type", "application/json")
+	reqForbidden.Header.Set("Remote-User", "guest@example.com")
+	reqForbidden.Header.Set("Remote-Groups", "Guests")
+
+	respForbidden, err := http.DefaultClient.Do(reqForbidden)
+	require.NoError(t, err)
+	_ = respForbidden.Body.Close()
+	assert.Equal(t, http.StatusForbidden, respForbidden.StatusCode)
+
+	// 9. Test anonymous secret redemption GET /api/get/:id succeeds (200 OK)
+	client.HTTPClient = http.DefaultClient
+	fetchedSecret, err := client.Fetch(secretURL)
+	require.NoError(t, err)
+	assert.Equal(t, "Authelia Container Session Secret", fetchedSecret.Secret)
+}
+
+type forwardAuthHeaderClient struct {
+	user   string
+	email  string
+	groups string
+	client *http.Client
+}
+
+func (f *forwardAuthHeaderClient) Do(req *http.Request) (*http.Response, error) {
+	req.Header.Set("Remote-User", f.user)
+	req.Header.Set("Remote-Email", f.email)
+	req.Header.Set("Remote-Groups", f.groups)
+	return f.client.Do(req)
 }

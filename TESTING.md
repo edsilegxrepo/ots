@@ -6,32 +6,42 @@ This document provides a comprehensive guide to the architecture, design, test c
 
 ## 1. Architecture, Design & Principles
 
-The OTS test suite is designed around three core principles:
+The OTS test suite is structured around three core principles and spans **5 distinct test categories**:
 1. **Zero-Flake Isolation:** Unit tests run in-memory without external infrastructure or database dependencies.
 2. **End-to-End Cryptographic Integrity:** Tests verify that secrets are encrypted on the client side, stored purely as encrypted blobs, and decrypted locally upon retrieval.
-3. **OS & Environment Independence:** Extension matching and rate-limiting tests execute deterministically across Windows x86_64 and Linux amd64 target environments.
+3. **OS & Environment Independence:** Extension matching, authentication, rate-limiting, and browser tests execute deterministically across Windows x86_64 (WSL Docker / native) and Linux amd64 target environments.
+
+### The 5 Test Categories
+
+1. **CLI Unit & E2E Testing**: `cmd/ots-cli` subcommands, `genpass`, `--timeout` flag, `OTS_CLIENT_TIMEOUT` env var, attachment path-traversal sanitization.
+2. **API Unit & Integration Testing**: `pkg/auth` (Argon2id, HTTP Basic, ForwardAuth reverse proxy headers, RBAC policy evaluator), `pkg/storage/*` (Memory, SQLite, BadgerDB, Redis, Memcached), sliding-window rate limiter, custom operator config parser ([tests/config.yml](tests/config.yml)).
+3. **Live Container & SSO E2E (`//go:build e2e`)**: Live HTTP integration tests against real Docker containers including **Authelia SSO (`authelia/authelia:4.38`)** on port `9091` (`TestAutheliaContainerLiveE2E`) and live storage backends.
+4. **Master Production Scenario E2E (`//go:build e2e`)**: 20 parallel worker goroutines verifying client SDK secret creation, dual-channel split key redemption, attachment streaming, and multi-read reusability.
+5. **UI Testing (Vitest Component Unit + Playwright Browser E2E)**:
+   - **Vitest (`pnpm test:ui`)**: Vue 3 component unit testing ([src/components/message-modal.test.ts](src/components/message-modal.test.ts)) with `jsdom` testing all 4 delivery templates and 4 output formats. Configured in [tests/vitest.config.mts](tests/vitest.config.mts).
+   - **Playwright (`pnpm test:ui:e2e`)**: Real headless Chromium browser testing ([tests/ui/e2e/ui-browser.spec.ts](tests/ui/e2e/ui-browser.spec.ts)) resolving custom browser binaries via [tests/ui/chromium-resolver.ts](tests/ui/chromium-resolver.ts). Configured in [tests/playwright.config.ts](tests/playwright.config.ts) with outputs saved to `testfiles/ui/results/`.
 
 ```mermaid
 graph TD
-    Submodules["OTS Workspace Modules"] --> MainPkg["github.com/edsilegxrepo/ots<br/>(API & Server)"]
+    Submodules["OTS Workspace Submodules"] --> MainPkg["github.com/edsilegxrepo/ots<br/>(API & Server)"]
     Submodules --> CustPkg["pkg/customization<br/>(File Groups & Config)"]
     Submodules --> ClientPkg["pkg/client<br/>(Client SDK & Cryptography)"]
     Submodules --> MetricsPkg["pkg/metrics<br/>(Prometheus Collector)"]
-    Submodules --> StoragePkg["pkg/storage/memory<br/>(In-Memory Store)"]
+    Submodules --> StoragePkg["pkg/storage/*<br/>(Memory, SQLite, Badger, Redis, Memcached)"]
     Submodules --> CLIPkg["cmd/ots-cli<br/>(CLI Client)"]
+    Submodules --> UIPkg["UI Test Suite<br/>(Vitest & Playwright)"]
 
-    MainPkg --> API_Tests["API & HTTP Tests<br/>(api_test.go, main_test.go)"]
-    MainPkg --> RL_Tests["Rate Limiter Tests<br/>(ratelimit_test.go)"]
+    MainPkg --> API_Tests["API Unit & Live E2E<br/>(production_e2e_test.go)"]
+    MainPkg --> Authelia_Tests["Live Authelia SSO E2E<br/>(TestAutheliaContainerLiveE2E)"]
 
-    CustPkg --> FG_Tests["Group & Extension Tests<br/>(file_groups_test.go, customize_test.go)"]
+    CustPkg --> FG_Tests["Group & Customization Tests<br/>(customize_test.go)"]
 
-    ClientPkg --> OTS_Tests["Crypto & Sanity Tests<br/>(client_test.go, ots_meta_test.go, sanity_test.go)"]
+    ClientPkg --> OTS_Tests["Crypto & Timeout Options<br/>(client_test.go)"]
 
-    MetricsPkg --> M_Tests["Prometheus Collector Tests<br/>(metrics_test.go)"]
+    CLIPkg --> CLI_Tests["CLI Unit & Timeout Tests<br/>(cli_e2e_test.go)"]
 
-    StoragePkg --> Mem_Tests["Storage Lifecycle Tests<br/>(memory_test.go)"]
-
-    CLIPkg --> CLI_Tests["CLI E2E Tests<br/>(cli_e2e_test.go, write-attachment_test.go)"]
+    UIPkg --> Vitest_Tests["Vitest Vue Component Unit<br/>(message-modal.test.ts)"]
+    UIPkg --> PW_Tests["Playwright E2E Browser<br/>(ui-browser.spec.ts)"]
 ```
 
 ---
@@ -44,11 +54,11 @@ The test suite validates both **positive execution paths** (happy path) and **ne
 sequenceDiagram
     autonumber
     actor CLI as CLI Client (cmd/ots-cli)
-    actor TestRunner as Go Test Runner
+    actor TestRunner as Go Test Runner / PW
     participant API as OTS Server / API Handler
     participant RL as IP Rate Limiter
     participant Sanity as Client Sanity Check
-    participant Store as Memory Storage Provider
+    participant Store as Memory / Pluggable Store
 
     rect rgb(230, 245, 230)
         note over TestRunner, Store: End-to-End Positive Path (Valid Secret Lifecycle)
@@ -83,13 +93,20 @@ sequenceDiagram
 
 ### Dependencies
 - **Go**: Version `1.21` or higher.
+- **Node.js & pnpm**: Version `18+` for Vue 3, Vitest, and Playwright UI tests.
 - **Testing Libraries**: `github.com/stretchr/testify` (`assert`, `require`).
 - **HTTP Routing & Multiplexing**: `github.com/gorilla/mux`.
 - **Metrics**: `github.com/prometheus/client_golang`.
 - **CLI Framework**: `github.com/spf13/cobra`.
+- **Docker / WSL Docker**: For live container E2E tests (`docker-compose.authelia.yml`).
+- **Chromium**: Path resolved automatically via [tests/ui/chromium-resolver.ts](tests/ui/chromium-resolver.ts):
+  1. `--with-chrome-bin` flag
+  2. `CHROME_BIN` environment variable
+  3. OS Fallbacks: `D:\inet\www\chromium\bin\chrome.exe` (Windows) / `/u01/chromium/bin/chrome` (Linux).
 
 ### Environment Variables
 - `GITHUB_TOKEN`: *(Optional)* Set to empty string in PowerShell (`$env:GITHUB_TOKEN=""`) when running `gh` CLI commands locally.
+- `OTS_CLIENT_TIMEOUT`: *(Optional)* Sets custom HTTP request timeout for client SDK operations (e.g. `15s`, `1m`).
 
 ### Workspace Constraints
 - OTS consists of decoupled Go submodules (`pkg/customization`, `pkg/client`, `cmd/ots-cli`).
@@ -99,14 +116,16 @@ sequenceDiagram
 
 ## 4. Test Inventory & Specification Table
 
-| Logical Group | Test Name | Technical Purpose / Description | Success Criteria (Expected Result) |
+| Logical Group | Test Name / Spec | Technical Purpose / Description | Success Criteria (Expected Result) |
 |---|---|---|---|
 | **Master Live E2E**| `TestMasterProductionScenarioE2E` | Master production scenario suite testing SDK lifecycle, split-keys, premature burning, multi-read reusability, extension filtering, raw streaming, storage caps, custom expiry, and 20 parallel worker goroutines. | **PASS**: All 9 real-life production scenarios pass with 0 race conditions. |
+| **Authelia Container Live E2E**| `TestAutheliaContainerLiveE2E` | Live E2E HTTP integration test querying real **Authelia (`authelia/authelia:4.38`)** container on port `9091` (`/api/health`, `/api/verify`, `/api/firstfactor`). | **PASS**: 401 unauthenticated, 403 forbidden group, and 201 authorized ForwardAuth header session verified. |
 | **IAM Live E2E** | `TestForwardAuthIAMProtectionE2E` | Live E2E IAM ForwardAuth header protection (`X-Forwarded-User`, `X-Forwarded-Groups`). Tests 401 unauthenticated, 403 unauthorized group, and 201 authorized group. | **PASS**: Authelia / Traefik / Nginx reverse proxy headers enforced correctly. |
-| **Storage Live E2E**| `TestAllFiveStorageBackendsLiveE2E` | Live E2E verification of secret creation, attachment delivery, and burn-after-read across Memory, SQLite, BadgerDB, Redis, and Memcached engines. | **PASS**: All storage engines create, retrieve, and destroy secrets cleanly. |
+| **Storage Live E2E**| `TestAllFiveStorageBackendsLiveE2E` | Live E2E verification of secret creation, attachment delivery, and burn-after-read across Memory, SQLite, BadgerDB, Redis, and Memcached engines. | **PASS**: All 5 storage engines create, retrieve, and destroy secrets cleanly. |
 | **Auth Pipeline** | `TestForwardAuthAuthenticator` | Tests ForwardAuth reverse proxy header trust, IP verification, and identity extraction. | **PASS**: Trusted proxy headers return identity; untrusted header spoofing rejected. |
 | **Auth Pipeline** | `TestLocalArgon2idAuthenticator` | Tests Argon2id password verification, atomic file saving, user deletion, base64 fallback, and hot-reloading. | **PASS**: Argon2id verification succeeds; `DeleteUser` removes entry atomically. |
 | **Auth Pipeline** | `TestRBACEvaluator` | Tests group RBAC authorization and path normalization (`path.Clean()`) against `/api/create`. | **PASS**: Authorized groups pass; unauthorized or path-traversal attempts return 403 Forbidden. |
+| **CLI Timeout** | `TestCLITimeoutConfiguration` | Tests `--timeout` CLI flag and `OTS_CLIENT_TIMEOUT` environment variable configuration. | **PASS**: Client SDK timeout configured cleanly without hardcoded hacks. |
 | **CLI User Suite**| `TestCLIUserAddListDisableDelete` | Full E2E CLI testing of `ots-cli user add`, `list`, `disable`, and `delete` commands against `users.yaml`. | **PASS**: User account created, listed, disabled, and deleted cleanly. |
 | **Live E2E** | `TestLiveServerLargeAttachmentsE2E` | Verifies end-to-end 10MB binary attachment payload creation, HTTP transfer, and byte-for-byte decryption against live local OTS server. | **PASS**: 10MB attachment uploaded, fetched, and verified 100% intact. |
 | **Live E2E** | `TestLiveServerExtensionFilteringE2E` | Tests live extension filtering using group aliases (`@images`, `@office`) and blocked extensions (`.exe`). | **PASS**: Allowed extensions pass pre-flight; blocked extensions return `false`. |
@@ -145,7 +164,7 @@ sequenceDiagram
 | **File Groups** | `TestExpandAcceptedFileTypes` | Tests alias expansion (`@images`, `@packages`, `@office`, `@archives`, `@code`) & MIME tokens. | **PASS**: Group aliases expanded into normalized lower-case extension lists. |
 | **File Groups** | `TestIsFilenameAllowed` | Tests case-insensitive filename extension matching (`photo.JPG`, `bundle.tar.gz`). | **PASS**: Permitted extensions return `true`; blocked extensions return `false`. |
 | **File Groups** | `TestLoadCustomFileGroups` | Tests loading custom file group definitions from external JSON files. | **PASS**: Custom group aliases correctly loaded and mapped. |
-| **Customization** | `TestCustomizeLoadAndToJSON` | Tests YAML configuration loading, default application, and JSON serialization. | **PASS**: Default values populated; `ToJSON()` produces valid JSON. |
+| **Customization** | `TestCustomizeLoadAndToJSON` | Tests YAML configuration loading from [tests/config.yml](tests/config.yml), default application, and JSON serialization. | **PASS**: Default values populated; `ToJSON()` produces valid JSON. |
 | **Client Crypto** | `TestGeneratePassword` | Tests cryptographically secure random password generation. | **PASS**: Password generated with exact requested length and character set. |
 | **Client Crypto** | `TestOTSMetaSerializationAndDeserialization` | Tests encryption, attachment serialization, decryption, wrong pass, corrupt base64. | **PASS**: Valid decryption succeeds; wrong passphrase / bad base64 returns error. |
 | **Client SDK** | `TestIntegration` | End-to-end integration test creating and fetching a secret with attachments. | **PASS**: Created secret matches fetched secret exactly. |
@@ -164,6 +183,8 @@ sequenceDiagram
 | **API Server E2E** | `TestLiveServerAPIExtensionFilteringE2E` | Tests live server API extension validation on `POST /api/create`, rejecting disallowed files with HTTP 400. | **PASS**: Disallowed `.exe` uploads return 400 Bad Request. |
 | **API Server E2E** | `TestLiveServerPluggableStorageBackendsE2E` | Tests live secret creation, encryption, and one-time destruction across live SQLite and BadgerDB instances. | **PASS**: Secret payload created and wiped cleanly. |
 | **CLI E2E** | `TestCLIMultiAttachmentAndExtensionValidationE2E` | Tests CLI multi-file attachment handling, Base64 serialization, and extension validation. | **PASS**: Multi-file CLI attachments serialized and verified. |
+| **UI Component** | [src/components/message-modal.test.ts](src/components/message-modal.test.ts) | Vitest unit test mounting `AppMessageModalButton` Vue 3 component in `jsdom`. Tests modal open/close, 4 delivery templates (*Full Link*, *Dual Link*, *Dual Key*, *Combined Chat*), and 4 output formats (*Plain Text*, *HTML Email Box*, *Markdown*, *JSON Payload*). | **PASS**: Component mounts, switches tabs/formats, and generates template text output. |
+| **UI Browser** | [tests/ui/e2e/ui-browser.spec.ts](tests/ui/e2e/ui-browser.spec.ts) | Playwright E2E browser test running real headless Chromium. Tests secret input, button clicks, URL generation, browser-side decryption, and burn validation. | **PASS**: Secret payload created, URL extracted, browser opens link, decrypts secret, and validates burn. |
 
 ---
 
@@ -185,12 +206,28 @@ sequenceDiagram
 
 ---
 
-## 6. How to Run the Tests
+## 6. How to Run All Tests
+
+### Running Fast Unit Tests via Makefile
+
+```bash
+# Run all fast unit tests (Go API + Go CLI + Vitest UI Components)
+make test
+```
+
+### Running Live E2E Integration Tests via Makefile
+
+> **Note:** Ensure dependency containers are running via `wsl docker compose -f tests/docker-compose.authelia.yml up -d` (Windows) or `docker compose -f tests/docker-compose.authelia.yml up -d` (Linux).
+
+```bash
+# Run all live E2E integration tests (Go Live Containers + Playwright E2E Browser)
+make test-e2e
+```
 
 ### Running Tests in PowerShell (Windows - Go 1.26+)
 
 ```powershell
-# Run all tests across the workspace including CLI E2E tests
+# Run all Go unit tests across workspace including CLI
 go test -v .
 cd pkg/client; go test -v .
 cd ../../cmd/ots-cli; go test -v .
@@ -206,12 +243,21 @@ cd ../../cmd/ots-cli; go test -cover .
 # Generate and view detailed function coverage profile
 go test "-coverprofile=c.out" github.com/edsilegxrepo/ots
 go tool cover -func c.out
+
+# Run Vitest Vue 3 UI component unit tests
+pnpm test:ui
+
+# Run Playwright E2E Chromium browser tests
+pnpm test:ui:e2e
+
+# Run Go Live E2E tests
+go test -v -tags=e2e -timeout 20m ./...
 ```
 
 ### Running Tests in Bash (Linux amd64)
 
 ```bash
-# Run all tests recursively including CLI E2E tests
+# Run all Go tests recursively
 go test -v ./...
 (cd cmd/ots-cli && go test -v ./...)
 
@@ -221,6 +267,10 @@ go test -cover ./...
 # Generate and inspect coverage report
 go test -coverprofile=c.out ./...
 go tool cover -func=c.out
+
+# Run UI test suites
+pnpm test:ui
+pnpm test:ui:e2e
 ```
 
 ### Running Build & Live Validation Suite with Redis Storage

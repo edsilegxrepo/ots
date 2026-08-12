@@ -1,64 +1,57 @@
 openapi: 3.0.0
 info:
   description: >
-    OTS is a one-time-secret sharing platform.
+    OTS is a zero-knowledge one-time-secret sharing platform.
 
 
     When using the web application, the secret is encrypted with a symmetric
-    256bit AES encryption in the browser before being sent to the server.
-    Afterwards an URL containing the ID of the secret and the password is
-    generated. The password is never sent to the server so the server will never
-    be able to decrypt the secrets it delivers with a reasonable effort.
+    256bit AES-GCM encryption in the browser before being sent to the server.
+    Afterwards a URL containing the secret ID and decryption key hash is
+    generated. The decryption key is never transmitted to the server.
 
 
-    This API allows you to store and read the same secrets as the web
-    application.
-  title: Luzifer/OTS API
+    This API allows you to store, read, burn, and inspect settings for secrets.
+  title: OTS API
   version: 1.x
 externalDocs:
-  description: Luzifer/OTS on Github
-  url: https://github.com/Luzifer/ots
+  description: OTS on Github
+  url: https://github.com/edsilegxrepo/ots
 servers:
   - url: http://127.0.0.1:3000/api
     description: Local OTS server instance
 paths:
   /create:
     post:
-      summary: Store a new secret on the OTS server
+      summary: Store a new encrypted secret on the OTS server
       description: >-
-        You should encrypt the secret prior to sending it to the server. For
-        maximum compatibility, [use the same encryption as the web
-        application](https://github.com/Luzifer/ots). Plain text secrets are
-        supported but not recommended.
-
-
-        To generate a URL that works with the web application, append
-        `#SECRET_ID|PASSWORD` after the URL. For an instance on
-        `http://127.0.0.1:3000`, the example response in this documentation would
-        become `http://127.0.0.1:3000/#5e0065ee-5734-4548-9fd3-bb0bcd4c899d|mypass`.
-        Note that you should correctly [percent
-        encode](https://datatracker.ietf.org/doc/html/rfc3986) the `|` (pipe)
-        character for it to work in all browsers.
+        You should encrypt the secret prior to sending it to the server. Plain
+        text secrets are supported but client-side AES-256-GCM encryption is recommended.
       operationId: createSecret
       parameters:
         - name: expire
           in: query
           description: >-
-            Override the default secret expiry with this value given in seconds.
-            Values bigger than the configured secret expiry will silently be
-            ignored and the default expiry will be used.
+            Override default secret expiry with this value in seconds.
           required: false
           schema:
             type: integer
             format: int64
             minimum: 0
+        - name: reads
+          in: query
+          description: >-
+            Number of allowed views before secret is permanently destroyed (default 1).
+          required: false
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Secret'
-          multipart/form-data:
+          application/x-www-form-urlencoded:
             schema:
               $ref: '#/components/schemas/Secret'
       responses:
@@ -74,8 +67,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '429':
+          description: IP Rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500':
-          description: Internal error, nothing is wrong with the request.
+          description: Internal storage or server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /create/raw:
+    post:
+      summary: Store raw binary payload directly on the OTS server
+      description: Stream raw binary payload in request body.
+      operationId: createSecretRaw
+      parameters:
+        - name: expire
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: reads
+          in: query
+          required: false
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Reference to the stored raw binary secret.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedSecret'
+        '429':
+          description: IP Rate limit exceeded.
           content:
             application/json:
               schema:
@@ -84,10 +120,7 @@ paths:
     get:
       summary: Retrieve an existing secret from the OTS server
       description: >-
-        You may need to decrypt the secret after retrieving it. For maximum
-        compatibility, [use the same encryption as the web
-        application](https://github.com/Luzifer/ots). Plain text secrets are
-        supported but not recommended.
+        Retrieves the secret content. If remaining reads reach zero, the secret is permanently destroyed.
       operationId: getSecret
       parameters:
         - in: path
@@ -111,17 +144,90 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: Secret does not exist, may be read by someone else.
+          description: Secret does not exist or has expired / already burned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
         '500':
-          description: Internal error, nothing is wrong with the request.
+          description: Internal error.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /burn/{id}:
+    get:
+      summary: Immediately burn and destroy an unread secret
+      description: Permanently deletes the secret without returning content.
+      operationId: burnSecretGet
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Secret burned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BurnResponse'
+        '404':
+          description: Secret not found or already burned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Immediately burn and destroy an unread secret
+      description: Permanently deletes the secret without returning content.
+      operationId: burnSecretPost
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Secret burned successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BurnResponse'
+        '404':
+          description: Secret not found or already burned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /settings:
+    get:
+      summary: Retrieve server customization parameters
+      description: Exposes operator settings (max attachment size, allowed extensions, expiry choices).
+      operationId: getSettings
+      responses:
+        '200':
+          description: Server customization settings.
+          content:
+            application/json:
+              schema:
+                type: object
+  /isWritable:
+    get:
+      summary: Check if instance accepts write operations
+      operationId: isWritable
+      responses:
+        '204':
+          description: Instance is writable.
+  /healthz:
+    get:
+      summary: Health check probe
+      operationId: healthz
+      responses:
+        '200':
+          description: Instance is healthy.
 components:
   schemas:
     Secret:
@@ -130,6 +236,9 @@ components:
         secret:
           type: string
           example: U2FsdGVkX18wJtHr6YpTe8QrvMUUdaLZ+JMBNi1OvOQ=
+        reads:
+          type: integer
+          example: 1
       required:
         - secret
     CreatedSecret:
@@ -137,17 +246,36 @@ components:
       properties:
         success:
           type: boolean
+          example: true
         secret_id:
           type: string
           example: 5e0065ee-5734-4548-9fd3-bb0bcd4c899d
+        expires_at:
+          type: string
+          format: date-time
+          example: '2026-12-31T23:59:59Z'
     RetrievedSecret:
       type: object
       properties:
         success:
           type: boolean
+          example: true
         secret:
           type: string
           example: U2FsdGVkX18wJtHr6YpTe8QrvMUUdaLZ+JMBNi1OvOQ=
+        reads_remaining:
+          type: integer
+          example: 0
+        expires_at:
+          type: string
+          format: date-time
+          example: '2026-12-31T23:59:59Z'
+    BurnResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
     Error:
       type: object
       properties:
@@ -156,4 +284,4 @@ components:
           example: false
         error:
           type: string
-          example: Something went wrong.
+          example: rate_limit_exceeded

@@ -1,6 +1,6 @@
 FROM docker.io/library/golang:1.26.5-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS builder
 
-COPY --from=ghcr.io/luzifer-docker/pnpm:v11.17.0@sha256:b42fe72c1713ce930adc15c7ffa52b959ea60870fe758ce2107451544861c76a . /
+COPY --from=ghcr.io/<repo>/pnpm:<version> . /
 
 ENV CGO_ENABLED=0 \
     GOPATH=/go \
@@ -24,10 +24,10 @@ RUN set -ex \
 FROM scratch
 
 LABEL org.opencontainers.image.authors='Knut Ahlers <knut@ahlers.me>' \
-    org.opencontainers.image.version='1.21.9' \
-    org.opencontainers.image.url='https://github.com/Luzifer/ots/pkgs/container/ots' \
-    org.opencontainers.image.documentation='https://github.com/Luzifer/ots/wiki' \
-    org.opencontainers.image.source='https://github.com/Luzifer/ots' \
+    org.opencontainers.image.version='<version>' \
+    org.opencontainers.image.url='https://github.com/<repo>/ots/pkgs/container/ots' \
+    org.opencontainers.image.documentation='https://github.com/<repo>/ots/wiki' \
+    org.opencontainers.image.source='https://github.com/<repo>/ots' \
     org.opencontainers.image.licenses='Apache-2.0'
 
 COPY --from=builder /src/ots/ots /usr/local/bin/ots

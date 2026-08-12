@@ -1,0 +1,11 @@
+# Authelia test users database
+users:
+  john:
+    disabled: false
+    displayname: "John Doe"
+    # Password: "password"
+    password: "$argon2id$v=19$m=65536,t=3,p=2$VEVTVF9TQUxUXzEyMzQ1Njc4$8A3xXQ/3/fS/m55eD/v1hQ"
+    email: "john@example.com"
+    groups:
+      - Engineering
+      - OTS-Creators

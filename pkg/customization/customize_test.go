@@ -52,13 +52,16 @@ func TestCustomizeDefaultMaxSecretSizeCalculation(t *testing.T) {
 }
 
 func TestLoadTestDataReferenceCustomize(t *testing.T) {
-	refPath := filepath.Join("..", "..", "testdata", "config.yml")
+	refPath := filepath.Join("..", "..", "tests", "config.yml")
 	if _, err := os.Stat(refPath); os.IsNotExist(err) {
-		t.Skip("testdata/config.yml not found at path")
+		refPath = filepath.Join("..", "..", "testdata", "config.yml")
+		if _, err := os.Stat(refPath); os.IsNotExist(err) {
+			t.Skip("tests/config.yml not found at path")
+		}
 	}
 
 	cust, err := Load(refPath)
-	require.NoError(t, err, "testdata/config.yml must parse cleanly without errors")
+	require.NoError(t, err, "tests/config.yml must parse cleanly without errors")
 	assert.Equal(t, "OTS - One Time Secrets", cust.AppTitle)
 	assert.True(t, cust.DisablePoweredBy)
 	assert.Len(t, cust.FooterLinks, 3)

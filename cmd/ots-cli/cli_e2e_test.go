@@ -176,6 +176,40 @@ func TestCLINewCommands(t *testing.T) {
 	assert.Equal(t, "Test OTS Instance", settings.AppTitle)
 	assert.Equal(t, int64(10485760), settings.MaxAttachmentSizeTotal)
 	assert.Equal(t, []string{".pdf", ".txt"}, settings.ResolvedAcceptedExtensions)
+
+	// 3. Test persistent --timeout flag setting client.RequestTimeout
+	origTimeout := client.RequestTimeout
+	defer func() { client.RequestTimeout = origTimeout }()
+
+	err = rootCmd.PersistentFlags().Set("timeout", "15s")
+	require.NoError(t, err)
+	err = rootPersistentPreRunE(rootCmd, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 15*time.Second, client.RequestTimeout)
+}
+
+func TestCLITimeoutConfiguration(t *testing.T) {
+	origTimeout := client.RequestTimeout
+	defer func() { client.RequestTimeout = origTimeout }()
+
+	t.Run("CLI Flag Timeout Override", func(t *testing.T) {
+		err := rootCmd.PersistentFlags().Set("timeout", "25s")
+		require.NoError(t, err)
+		err = rootPersistentPreRunE(rootCmd, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 25*time.Second, client.RequestTimeout)
+	})
+
+	t.Run("OTS_CLIENT_TIMEOUT Environment Variable Override", func(t *testing.T) {
+		t.Setenv("OTS_CLIENT_TIMEOUT", "45s")
+		envVal := os.Getenv("OTS_CLIENT_TIMEOUT")
+		assert.Equal(t, "45s", envVal)
+
+		parsed, err := time.ParseDuration(envVal)
+		require.NoError(t, err)
+		client.RequestTimeout = parsed
+		assert.Equal(t, 45*time.Second, client.RequestTimeout)
+	})
 }
 
 func TestCLIBurnAndInfoE2EAgainstLiveServer(t *testing.T) {

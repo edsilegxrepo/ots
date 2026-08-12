@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	redisDefaultPrefix = "io.luzifer.ots"
+	redisDefaultPrefix = "io.ots.secret"
 	redisScanCount     = 10
 )
 

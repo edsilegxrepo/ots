@@ -476,3 +476,60 @@ iam:
 ### E. CLI `--create-ots-link` Authentication Loopback
 * **Audit Finding:** How does `ots-cli user add --create-ots-link` authenticate to `/api/create` when creating Bob's onboarding link?
 * **Verdict: RESOLVED.** `ots-cli` can authenticate using `--admin-auth` flags, environment variables, or a loopback admin token generated at server startup.
+
+---
+
+## 10. Operational Modes: Unauthenticated vs Protected Secret Creation
+
+OTS supports two operational modes for secret creation (`POST /api/create`). Both modes preserve **Zero-Knowledge Encryption** (payloads are encrypted client-side before transport; the server never receives plain text or keys).
+
+```
++-----------------------------------------------------------------------------------------+
+|                                    OTS ROUTING LAYER                                    |
+|                                                                                         |
+|  [ PUBLIC ANONYMOUS ENDPOINTS ]                   [ PROTECTED CREATION ENDPOINT ]       |
+|  GET /api/get/:id  (Secret Redemption)            POST /api/create  (Secret Generation)  |
+|  GET /api/settings (Capability Discovery)         Mode 1: Unauthenticated               |
+|  GET /api/healthz  (Liveness Check)               Mode 2: Authenticated & Authorized    |
++-----------------------------------------------------------------------------------------+
+```
+
+### Mode 1: Allow Unauthenticated Secret Creation (Public / Open Mode)
+
+* **Use Case**: Publicly accessible instances, open internal team networks, or environments where frictionless secret creation is desired without onboarding users into an identity directory.
+* **API Protection Policy**:
+  * `iam.enabled: false` (or `defaultPolicy: "allow"` with `/api/create` excluded from `protectedEndpoints`).
+  * `POST /api/create` accepts anonymous HTTP requests.
+  * Secondary defenses remain active: IP rate limiting (`pkg/ratelimit`), file extension blacklists, request payload limits, and CORS policies.
+* **UI (Browser Web App) Perspective**:
+  * SPA queries `/api/settings` on startup (`authRequired: false`).
+  * Visitor opens the web app, inputs secret data, and clicks **"Create Secret"** without any login prompts.
+* **CLI / API Perspective**:
+  * `ots-cli create` or `curl -X POST https://ots.example.com/api/create -d '...'` works directly without credentials.
+
+### Mode 2: No Unauthenticated Access to Create Secrets (Enterprise / Protected Mode)
+
+* **Use Case**: Corporate infrastructure, Zero-Trust network architectures, compliance-regulated environments (SOC2, HIPAA, ISO 27001), or internal IT portals where secret creation must be strictly tied to verified employee identities.
+* **API Protection Policy**:
+  * `iam.enabled: true` with `protectedEndpoints: ["/api/create"]`.
+  * `POST /api/create` requires valid credentials (Local Argon2id / Basic Auth, ForwardAuth proxy headers, or OAuth2 Bearer token).
+  * **Public Exemption**: Secret redemption endpoints (`GET /secret`, `GET /api/get/:id`, `/api/healthz`, `/api/settings`) **remain 100% public & anonymous** so recipients can burn secrets without needing an account.
+  * **Rejection**: Unauthenticated `POST /api/create` requests receive `401 Unauthorized` (`WWW-Authenticate: Basic realm="..."`) and JSON `{"error": "Authentication required"}`.
+* **UI (Browser Web App) Perspective**:
+  * **ForwardAuth / SSO Proxy**: Reverse proxy (Authelia, Authentik, Okta) redirects unauthenticated browser sessions to the SSO portal before accessing `/` or `/api/create`.
+  * **Local Basic / Form Auth**: SPA queries `/api/settings` (`authRequired: true`), prompting the user for credentials before submission.
+* **CLI / API Perspective**:
+  * `ots-cli` accepts `--username`/`--password` flags, `OTS_USERNAME`/`OTS_PASSWORD` environment variables, or config file settings.
+  * `curl -u "user:pass" -X POST https://ots.example.com/api/create ...` submits Basic Auth.
+  * Unauthenticated requests are cleanly rejected with `401 Unauthorized`.
+
+### Operational Modes Matrix
+
+| Dimension | Mode 1: Allow Unauthenticated Creation | Mode 2: Protected Creation Only |
+| :--- | :--- | :--- |
+| **Creation Endpoint (`POST /api/create`)** | Public (Rate-limited & sanitized) | Authenticated & Authorized (RBAC) |
+| **Redemption Endpoint (`GET /api/get/:id`)** | Public Anonymous | Public Anonymous (Preserves Burn) |
+| **UI Integration** | Immediate form access | ForwardAuth SSO Redirect or Local Login Prompt |
+| **CLI Integration** | `ots-cli create` (no auth flags) | `ots-cli create --username ... --password ...` |
+| **HTTP Failure Response** | `429 Too Many Requests` (if rate-limited) | `401 Unauthorized` / `403 Forbidden` |
+

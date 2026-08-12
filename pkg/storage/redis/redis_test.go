@@ -184,7 +184,7 @@ func TestRedisKeyFormatting(t *testing.T) {
 	// Default prefix
 	t.Setenv("REDIS_KEY", "")
 	key := s.redisKey("test-id-123")
-	assert.Equal(t, "io.luzifer.ots:test-id-123", key)
+	assert.Equal(t, "io.ots.secret:test-id-123", key)
 
 	// Custom prefix
 	t.Setenv("REDIS_KEY", "custom.prefix")

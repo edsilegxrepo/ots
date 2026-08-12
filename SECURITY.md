@@ -1,17 +1,30 @@
 # Security Policy
 
+We are committed to ensuring the security of our application, and addressing security issues with a high priority.
+
 ## Supported Versions
 
-| Version | Supported |
-| ------- | ------------------ |
-| `master` | :x: - This version is still unstable and should not be used. If you notice something is off with this version see below how to report a vulnerability. |
-| [latest release](https://github.com/Luzifer/ots/releases/latest) | :white_check_mark: |
-| older versions | :x: - All older releases than the current one might contain vulnerabilities and are no longer maintained. Please update to the latest release as quickly as you can. You can use the Github "Watch" functionality and watch for new releases to get notified. |
+We recommend always using the latest commit from the `main` branch, as we currently do not have a formal versioning scheme with designated security support.
 
 ## Reporting a Vulnerability
 
-To report an issue not affecting the safety of OTS instances please [open an issue on Github](https://github.com/Luzifer/ots/issues/new).
+If you discover a security vulnerability, please report via the following methods:
 
-To report an issue affecting the safety of OTS instances please send me an E-Mail to `knut@ahlers.me` with details about the issue. A PGP key is available here: [`0x5D7EEBD183A1F4395D1ED038A5143194CB681B44`](https://knut.in/gpg)
+1.  **Email** to `mis@criticalsys.net`. We will respond to your report within 48 hours.
+2.  **GitHub Private Vulnerability Reporting**: If this feature is enabled for the repository, please use it to submit your report. This is the most secure and preferred method.
+3.  **Create a Confidential Issue**: If private vulnerability reporting is not available, please create an issue on our GitHub repository. Please provide a clear and descriptive title, such as "Security Vulnerability: [Brief Description]", and include as much detail as possible in the issue description. If you have the option to make the issue confidential, please do so.
 
-As this is only a small project maintained only by me there are no bug-bounties or other compensations.
+Please include the following information in your report:
+- A clear description of the vulnerability.
+- Steps to reproduce the vulnerability.
+- The version of the application you are using.
+- The potential impact of the vulnerability.
+- Any suggested mitigations or fixes, if you have them.
+
+We appreciate your efforts to responsibly disclose your findings, and we will make every effort to acknowledge your contributions.
+We will make our best effort to respond to your report promptly, acknowledge the issue, and keep you updated on our progress toward a fix.
+We kindly ask that you do not disclose the vulnerability publicly until we have had a chance to address it.
+
+Please do not report security vulnerabilities through public GitHub issues nor PR.
+
+Thank you for helping to keep our project secure.

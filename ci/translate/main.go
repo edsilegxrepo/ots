@@ -147,13 +147,6 @@ func main() {
 	if err = renderJSFile(tf); err != nil {
 		logrus.WithError(err).Fatal("rendering JS output")
 	}
-
-	if cfg.WriteIssueFile {
-		logrus.Info("writing issue template...")
-		if err = generateIssue(tf); err != nil {
-			logrus.WithError(err).Fatal("generating issue template")
-		}
-	}
 }
 
 func autoTranslate(tf *translationFile) error {

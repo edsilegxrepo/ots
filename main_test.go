@@ -283,3 +283,28 @@ func TestInitAppValidation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing log-level")
 }
+
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mw := securityHeadersMiddleware(nextHandler)
+
+	// 1. Without TLS
+	cfg.EnableTLS = false
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	mw.ServeHTTP(rec, req)
+
+	assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	assert.Equal(t, "DENY", rec.Header().Get("X-Frame-Options"))
+	assert.Equal(t, "no-referrer-when-downgrade", rec.Header().Get("Referrer-Policy"))
+	assert.Empty(t, rec.Header().Get("Strict-Transport-Security"))
+
+	// 2. With TLS Enabled
+	cfg.EnableTLS = true
+	recTLS := httptest.NewRecorder()
+	mw.ServeHTTP(recTLS, req)
+	assert.Equal(t, "max-age=31536000; includeSubDomains", recTLS.Header().Get("Strict-Transport-Security"))
+}

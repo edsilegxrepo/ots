@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  authelia:
+    image: authelia/authelia:4.38
+    container_name: authelia-sso
+    restart: always
+    volumes:
+      - ./config/authelia:/config
+    environment:
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET: 'jwt_secret_12345'
+      AUTHELIA_SESSION_SECRET: 'session_secret_12345'
+      AUTHELIA_STORAGE_ENCRYPTION_KEY: 'encryption_key_12345'
+    ports:
+      - "9091:9091"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authelia.rule=Host(`auth.local.gd`)"
+      - "traefik.http.routers.authelia.entrypoints=web"
+      - "traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?target=http://ots.local.gd/"
+      - "traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Email"
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik-proxy
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"

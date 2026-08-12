@@ -1,0 +1,24 @@
+enabled: true
+connector: "forwardauth"
+protectedEndpoints:
+  - "/api/create"
+  - "/api/create/raw"
+
+policy:
+  defaultPolicy: "deny"
+  allowedGroups:
+    - "Engineering"
+    - "OTS-Creators"
+
+connectors:
+  forwardauth:
+    enabled: true
+    userHeader: "Remote-User"
+    emailHeader: "Remote-Email"
+    groupsHeader: "Remote-Groups"
+    headerDelimiter: ","
+    trustedProxies:
+      - "127.0.0.1"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
