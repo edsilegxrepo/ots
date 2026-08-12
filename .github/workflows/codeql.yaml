@@ -44,9 +44,7 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           build-mode: ${{ matrix.build-mode }}
-          config: |
-            paths-ignore:
-              - src/langs/langs.tpl.js
+          config-file: .github/codeql/codeql-config.yml
           languages: ${{ matrix.language }}
 
       - name: Perform CodeQL Analysis
