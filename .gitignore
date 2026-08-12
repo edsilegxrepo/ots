@@ -24,6 +24,7 @@ Thumbs.db
 *.swo
 
 # Languages
+node_modules/
 vendor/
 __pycache__/
 
