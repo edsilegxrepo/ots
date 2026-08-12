@@ -408,7 +408,7 @@ if [ "${UPDATE_DEPS}" = "true" ]; then
   # Sub-Step 5.2: Upgrade Node.js & Vue Packages via Package Manager (pnpm / npm)
   echo "2. Upgrading Node.js / Vue packages via pnpm..."
   if command -v pnpm &> /dev/null; then
-    pnpm update
+    pnpm update --latest
   elif command -v npm &> /dev/null; then
     npm update
   fi
